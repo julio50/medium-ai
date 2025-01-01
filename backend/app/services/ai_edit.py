@@ -1,8 +1,11 @@
-import openai
+from openai import OpenAI
 import re
-from app.config.config_files import APIkeys
+from app.config.config_files import OpenAIConfig
 
-openai.api_key = APIkeys.openaiAPI
+client = OpenAI(
+    api_key=OpenAIConfig.api_key,
+    base_url=OpenAIConfig.base_url,
+)
 
 
 def remove_newlines_and_spaces(string):
@@ -23,8 +26,8 @@ def edit_text_chat_completion(
     selected_text: str,
     temperature: float,
 ):
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
+    response = client.chat.completions.create(
+        model=OpenAIConfig.model,
         messages=[
             {
                 "role": "system",
@@ -50,16 +53,24 @@ def edit_text_chat_completion(
 
 
 def edit_text(instruction: str, selected_text: str, temperature: float):
-    response = openai.Edit.create(
-        model="text-davinci-edit-001",
-        input=selected_text,
-        instruction=instruction,
+    response = client.chat.completions.create(
+        model=OpenAIConfig.model,
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a helpful assistant to a writer. ONLY edit the text as instructed.",
+            },
+            {
+                "role": "user",
+                "content": "Edit the following text: "
+                f"{selected_text}" + "\n" + f"{instruction}",
+            },
+        ],
         temperature=temperature / 100,
-        top_p=1,
     )
 
     # remove /n and spaces from the end of the response
-    response_text = response.choices[0].text
+    response_text = response.choices[0].message.content
     response_text = remove_newlines_and_spaces(response_text)
 
     # remove /t from the response

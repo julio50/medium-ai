@@ -1,4 +1,4 @@
-# medium-ai: An open-source AI-powered text editor
+re# medium-ai: An open-source AI-powered text editor
 
 This is an AI-powered text editor whose design is inspired by [medium](https://medium.com). If you're already familiar with [medium](https://medium.com), you'll feel right at home.
 
@@ -97,6 +97,26 @@ Before running the backend, you need to create an openai API key from [here](htt
    ```
 
 5. Finally, refresh the browser and the frontend will automatically pick up the saved data (if any) stored at `backend/app/data/editor_state.json`
+
+### Docker Installation
+
+1.  Make sure you have Docker installed. You can download it from [here](https://www.docker.com/products/docker-desktop).
+2.  Navigate to the root of the project directory where the `docker-compose.yml` file is located.
+3.  Create a `.env` file in the root directory and add your OpenAI API key, base URL, and model like so:
+
+    ```
+    OPENAI_API_KEY=your_openai_api_key
+    OPENAI_BASE_URL=https://api.openai.com/v1
+    OPENAI_MODEL=gpt-3.5-turbo
+    ```
+
+4.  Run the following command to build and start the application:
+
+    ```shell
+    docker-compose up --build
+    ```
+
+5.  The frontend will be available at [http://localhost:5173](http://localhost:5173/) and the backend at [http://localhost:8080](http://localhost:8080/).
 
 ## End Notes
 

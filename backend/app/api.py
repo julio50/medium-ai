@@ -36,7 +36,6 @@ def autocomplete(context: AIAutoSuggest):
         previous_context=context.previousContext,
         current_context=context.currentContext,
         next_context=context.nextContext,
-        model_name=context.modelName,
     )
 
     return {"message": autocomplete_text}
@@ -77,7 +76,7 @@ def load_state():
 def ai_edit(ai_edit: AIEdit):
     logger.info(f"Received request to edit text")
 
-    n_tokens = num_tokens_from_string(ai_edit.selectedText, model_name="davinci")
+    n_tokens = num_tokens_from_string(ai_edit.selectedText)
     if n_tokens > 4096:
         raise HTTPException(
             status_code=400,
