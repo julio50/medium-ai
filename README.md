@@ -1,6 +1,8 @@
-re# medium-ai: An open-source AI-powered text editor
+# medium-ai: An open-source AI-powered text editor
 
 This is an AI-powered text editor whose design is inspired by [medium](https://medium.com). If you're already familiar with [medium](https://medium.com), you'll feel right at home.
+
+**Note:** This version works with LocalAI or any OpenAI compatible API instead of requiring the official OpenAI API.
 
 **Note:** medium-ai is an independent project and is not affliated with medium.com in any way. 
 
@@ -56,14 +58,18 @@ cd medium-ai
 
 The frontend will run in itself, however if you would want to save the data and access AI features, the backend must be running.
 
-Before running the backend, you need to create an openai API key from [here](https://platform.openai.com/account/api-keys). Follow the below steps next:
+Before running the backend, you need to configure your API settings. Create a file called `.env` inside the `backend/app/config` folder with the following configuration:
 
-1. Copy the key, create a file called `.env` inside the `backend/app/config` folder, and paste the API key like so:
-   
-   ```shell
-   OPENAI_KEY=si-IAx6f6cWlgqJ69RVwFKxT3BlbkFJI15IMe23MVM6GVLgjuSD
-   
-   ```
+```shell
+OPENAI_KEY=your_api_key
+OPENAI_BASE_URL=https://your.api.endpoint
+OPENAI_MODEL=your_model_name
+```
+
+You can use:
+- Official OpenAI API (https://api.openai.com/v1)
+- LocalAI (http://localhost:8080/v1)
+- Any other OpenAI compatible API
    
    ```
    Folder Structure:
@@ -105,10 +111,15 @@ Before running the backend, you need to create an openai API key from [here](htt
 3.  Create a `.env` file in the root directory and add your OpenAI API key, base URL, and model like so:
 
     ```
-    OPENAI_API_KEY=your_openai_api_key
-    OPENAI_BASE_URL=https://api.openai.com/v1
-    OPENAI_MODEL=gpt-3.5-turbo
+    OPENAI_API_KEY=your_api_key
+    OPENAI_BASE_URL=https://your.api.endpoint
+    OPENAI_MODEL=your_model_name
     ```
+
+    You can use:
+    - Official OpenAI API (https://api.openai.com/v1)
+    - LocalAI (http://localhost:8080/v1) 
+    - Any other OpenAI compatible API
 
 4.  Run the following command to build and start the application:
 
