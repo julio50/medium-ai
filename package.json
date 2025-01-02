@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "@lexical/react": "^0.22.0",
+    "lexical": "^0.22.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/katex": "^0.16.7",
+    "@types/react": "^19.0.2"
+  }
+}

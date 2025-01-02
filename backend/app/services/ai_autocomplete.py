@@ -30,7 +30,7 @@ def clip_context(
     current_context: str,
     next_context: str,
     max_tokens: int,
-    max_length: int = 2048,
+    max_length: int = 8192,
 ):
     """
     Combine and clip all the contexts to max_length.
@@ -110,15 +110,15 @@ def openai_completion(
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a helpful assistant that completes text. DO NOT RETURN THE INPUT TEXT. Only provide the completion and not the input, do not explain or add any other text."
+                    "content": "You are an intelligent text completion assistant. Your task is to continue the user's writing in a natural and coherent way. Focus on maintaining the writing style and context of the provided text. Only provide the completion text - do not repeat the input or add any explanations. Return plain text that flows seamlessly from the input."
                 },
                 {
                     "role": "user",
-                    "content": f"Complete this text: {input_text}"
+                    "content": f"Only return what comes after. Complete this text: {input_text}"
                 }
             ],
             max_tokens=max_tokens,
-            temperature=0.2,
+            temperature=0.7,
             stop=["\n"]
         )
         logging.debug(f"openai_completion - Request successful")
@@ -135,9 +135,16 @@ def openai_completion(
     res_text = remove_newlines_and_spaces(res_text)
     # remove tabs from the autocomplete response
     res_text = res_text.replace("\t", "")
+    
+    # prepend a space to the autocomplete response
+    res_text = " " + res_text
 
     if is_space_at_end:
         res_text = res_text.lstrip()
+
+    # Subtract input text from res_text if present
+    if input_text in res_text:
+        res_text = res_text.replace(input_text, '')
 
     return res_text
 
@@ -145,8 +152,8 @@ def fetch_autocomplete_response(
     previous_context: str,
     current_context: str,
     next_context: str,
-    min_tokens: int = 3,
-    max_tokens: int = 64,
+    min_tokens: int = 16,
+    max_tokens: int = 128,
 ):
     """
     Parameters

@@ -1,0 +1,157 @@
+Implementation Steps for Saving Editor Text to localStorage with Query Parameter Key:
+
+1. Add Query Parameter Parsing in Editor.tsx:
+   - Add URL parameter parsing near the top of the Editor component
+   ```typescript
+   const urlParams = new URLSearchParams(window.location.search);
+   const storageKey = urlParams.get('key') || 'defaultKey';
+   ```
+
+2. Modify Existing OnChangePlugin in Editor.tsx:
+   - Update the existing OnChangePlugin to include localStorage saving
+   ```typescript
+   <OnChangePlugin
+       onChange={(editorState) => {
+           if (editorStateRef !== null) {
+               editorStateRef.current = editorState;
+               // Add localStorage saving
+               try {
+                   localStorage.setItem(
+                       `editor-${storageKey}`,
+                       JSON.stringify(editorState)
+                   );
+               } catch (error) {
+                   console.warn('LocalStorage save failed:', error);
+               }
+           }
+       }}
+   />
+   ```
+
+3. Update LoadInitialStatePlugin (frontend/src/plugins/LoadInitialStatePlugin/index.tsx):
+   - Modify loadState() to check localStorage first
+   ```typescript
+   const loadState = async () => {
+       // Get storage key from URL
+       const urlParams = new URLSearchParams(window.location.search);
+       const storageKey = urlParams.get('key') || 'defaultKey';
+       
+       try {
+           // Try localStorage first
+           const localData = localStorage.getItem(`editor-${storageKey}`);
+           if (localData) {
+               return localData;
+           }
+
+           // Then try backend
+           const response = await fetch(LOAD_ENDPOINT);
+           if (response.ok) {
+               const data = await response.json();
+               return data;
+           } else if (response.status === 404) {
+               console.log("No saved state");
+               return null;
+           }
+           
+           console.log("Error loading from backend");
+           return null;
+       } catch (e) {
+           console.log("Error loading: Backend not running?");
+           // Fall back to local JSON file
+           return JSON.stringify(localState);
+       }
+   };
+   ```
+
+4. Add Periodic Backend Sync:
+   - Add a new plugin to handle backend synchronization
+   ```typescript
+   // frontend/src/plugins/BackendSyncPlugin/index.tsx
+   import { useEffect } from "react";
+   import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+   import { SAVE_ENDPOINT } from "../../constants";
+
+   export default function BackendSyncPlugin() {
+       const [editor] = useLexicalComposerContext();
+
+       useEffect(() => {
+           const syncInterval = setInterval(async () => {
+               const editorState = editor.getEditorState();
+               try {
+                   const response = await fetch(SAVE_ENDPOINT, {
+                       method: 'POST',
+                       headers: {
+                           'Content-Type': 'application/json',
+                       },
+                       body: JSON.stringify(editorState),
+                   });
+                   if (!response.ok) {
+                       console.warn('Backend sync failed');
+                   }
+               } catch (error) {
+                   console.warn('Backend sync error:', error);
+               }
+           }, 30000); // Sync every 30 seconds
+
+           return () => clearInterval(syncInterval);
+       }, [editor]);
+
+       return null;
+   }
+   ```
+
+5. Add BackendSyncPlugin to Editor.tsx:
+   ```typescript
+   import BackendSyncPlugin from "./plugins/BackendSyncPlugin";
+   
+   // Add to plugins list in LexicalComposer
+   <BackendSyncPlugin />
+   ```
+
+6. Error Handling and Edge Cases:
+   - localStorage quota exceeded
+   - Backend sync failures
+   - Cross-tab synchronization
+   ```typescript
+   // Add to OnChangePlugin
+   onChange={(editorState) => {
+       if (editorStateRef !== null) {
+           editorStateRef.current = editorState;
+           try {
+               localStorage.setItem(
+                   `editor-${storageKey}`,
+                   JSON.stringify(editorState)
+               );
+           } catch (error) {
+               if (error.name === 'QuotaExceededError') {
+                   console.warn('LocalStorage quota exceeded - falling back to backend only');
+               } else {
+                   console.warn('LocalStorage error:', error);
+               }
+           }
+       }
+   }}
+   ```
+
+7. Testing Scenarios:
+   - Test localStorage saving/loading with different keys
+   - Verify backend sync functionality
+   - Test fallback to local JSON when both localStorage and backend fail
+   - Verify state persistence across page reloads
+   - Test quota exceeded scenarios
+   - Verify cross-tab behavior
+   - Test offline functionality
+   - Verify compatibility with existing features:
+     * AI autocompletion
+     * Code highlighting
+     * Equation editing
+     * Image handling
+     * Rich text formatting
+
+Usage:
+- With specific key: /editor?key=myDocument
+- Without key: /editor (uses 'defaultKey')
+- Data saving priority:
+  1. localStorage (immediate, offline-capable)
+  2. Backend sync (periodic, server backup)
+  3. Local JSON (fallback when all else fails)

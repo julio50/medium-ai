@@ -4,6 +4,7 @@ from app.services.ai_autocomplete import (
     fetch_autocomplete_response,
     num_tokens_from_string,
 )
+from typing import List
 from app.services.ai_edit import edit_text, edit_text_chat_completion
 from loguru import logger
 from typing import Literal
@@ -28,6 +29,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.get("/v1/models")
+def get_models() -> List[str]:
+    """Return list of available AI models"""
+    return [
+        "text-davinci-003",
+        "text-davinci-002",
+        "text-davinci-001",
+        "text-curie-001",
+        "text-babbage-001",
+        "text-ada-001",
+        "davinci",
+        "curie",
+        "babbage",
+        "ada",
+        "none",
+    ]
 
 @app.post("/autocomplete")
 def autocomplete(context: AIAutoSuggest):

@@ -27,20 +27,6 @@ const MenuBar = ({
     saveState,
     isSaveFailed,
 }: MenuBarProps) => {
-    const models = [
-        "text-davinci-003",
-        "text-davinci-002",
-        "text-davinci-001",
-        "text-curie-001",
-        "text-babbage-001",
-        "text-ada-001",
-        "davinci",
-        "curie",
-        "babbage",
-        "ada",
-        "none",
-    ];
-
     const [showOptions, setShowOptions] = useState(false);
 
     return (
@@ -66,7 +52,19 @@ const MenuBar = ({
                             tabIndex={0}
                             className="dropdown-content menu-compact menu p-2 shadow rounded-box bg-white text-black font-poppins w-44"
                         >
-                            {models.map((model) => (
+                            {[
+                                "davinci",
+                                "curie",
+                                "babbage",
+                                "ada",
+                                "text-davinci-003",
+                                "text-davinci-002",
+                                "text-davinci-001",
+                                "text-curie-001",
+                                "text-babbage-001",
+                                "text-ada-001",
+                                "none",
+                            ].map((model) => (
                                 <li key={model}>
                                     <a
                                         href="#"

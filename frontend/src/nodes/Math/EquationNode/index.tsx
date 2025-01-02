@@ -1,3 +1,4 @@
+import React from 'react';
 import type {
     EditorConfig,
     LexicalNode,
@@ -65,8 +66,8 @@ function KatexComponent({ equation, isInline, nodeKey }: KatexComponentProps) {
                         prevSibling.select();
                     } else if ($isTextNode(nextSibling)) {
                         nextSibling.select(0, 0);
-                    } else {
-                        node.getParent().select();
+                    } else if (node.getParent()) {
+                        node.getParent()?.select();
                     }
 
                     node.remove();
@@ -132,7 +133,7 @@ function KatexComponent({ equation, isInline, nodeKey }: KatexComponentProps) {
     );
 }
 
-export class EquationNode extends DecoratorNode<JSX.Element> {
+export class EquationNode extends DecoratorNode<React.ReactElement> {
     __equation;
     __inline;
 
@@ -199,7 +200,7 @@ export class EquationNode extends DecoratorNode<JSX.Element> {
                 }
                 return {
                     conversion: convertEquationElement,
-                    priority: 2,
+                    priority: 2 as 2,
                 };
             },
             span: (domNode: HTMLElement) => {
@@ -208,7 +209,7 @@ export class EquationNode extends DecoratorNode<JSX.Element> {
                 }
                 return {
                     conversion: convertEquationElement,
-                    priority: 1,
+                    priority: 1 as 1,
                 };
             },
         };
@@ -241,7 +242,7 @@ export class EquationNode extends DecoratorNode<JSX.Element> {
         writable.__inline = isInline;
     }
 
-    decorate(): JSX.Element {
+    decorate(): React.ReactElement {
         return (
             <KatexComponent
                 equation={this.__equation}

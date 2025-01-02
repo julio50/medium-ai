@@ -58,7 +58,7 @@ def edit_text(instruction: str, selected_text: str, temperature: float):
         messages=[
             {
                 "role": "system",
-                "content": "You are a helpful assistant to a writer. ONLY edit the text as instructed.",
+                "content": "You are a helpful assistant to a writer. ONLY edit the text as instructed. Return plain text.",
             },
             {
                 "role": "user",

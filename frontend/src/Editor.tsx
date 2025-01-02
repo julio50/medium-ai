@@ -32,6 +32,8 @@ import { AutoCompleteNode } from "./nodes/AIAutoCompleteNode";
 import { AutoCompleteModel } from "./components/MenuBar";
 import { EditorState } from "lexical";
 import LoadInitialStatePlugin from "./plugins/LoadInitialStatePlugin";
+import BackendSyncPlugin from "./plugins/BackendSyncPlugin";
+import { useRef } from "react";
 
 function Placeholder() {
     return <></>;
@@ -44,6 +46,9 @@ export default function Editor({
     autoCompleteModel: AutoCompleteModel;
     editorStateRef: React.MutableRefObject<EditorState | null>;
 }) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const storageKey = urlParams.get('key') || 'defaultKey';
+
     const initialConfig = {
         editorState: null,
         namespace: "MyEditor",
@@ -62,7 +67,7 @@ export default function Editor({
             ListNode,
             ListItemNode,
             AutoCompleteNode,
-        ],
+        ] as const,
         theme: basicTheme,
     };
 
@@ -84,6 +89,14 @@ export default function Editor({
                         onChange={(editorState) => {
                             if (editorStateRef !== null) {
                                 editorStateRef.current = editorState;
+                                try {
+                                    localStorage.setItem(
+                                        `editor-${storageKey}`,
+                                        JSON.stringify(editorState)
+                                    );
+                                } catch (error) {
+                                    console.warn('LocalStorage save failed:', error);
+                                }
                             }
                         }}
                     />
@@ -103,6 +116,7 @@ export default function Editor({
                     <ListPlugin />
                     <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
                     <LoadInitialStatePlugin />
+                    <BackendSyncPlugin />
                     {autoCompleteModel !== "none" && (
                         <AIAutoCompletePlugin
                             autoCompleteModel={autoCompleteModel}
