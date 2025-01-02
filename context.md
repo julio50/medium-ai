@@ -24,6 +24,7 @@ The editor provides these key features:
 - Editor state persistence
 - Keyboard shortcuts (Ctrl+S to save)
 - Multiple AI model selection
+- LocalStorage support for saving documents in the browser
 
 # Code Locations
 ## Backend
