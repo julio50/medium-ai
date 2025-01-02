@@ -33,10 +33,41 @@ import { AutoCompleteModel } from "./components/MenuBar";
 import { EditorState } from "lexical";
 import LoadInitialStatePlugin from "./plugins/LoadInitialStatePlugin";
 import BackendSyncPlugin from "./plugins/BackendSyncPlugin";
-import { useRef } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 
 function Placeholder() {
     return <></>;
+}
+
+// Storage utilities
+const STORAGE_VERSION = '1.0';
+const MAX_STORAGE_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+interface StorageData {
+    version: string;
+    timestamp: number;
+    state: any;
+}
+
+function generateKey() {
+    return Math.random().toString(36).substring(2, 15);
+}
+
+function cleanupStorage() {
+    const now = Date.now();
+    Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('editor-')) {
+            try {
+                const data = JSON.parse(localStorage.getItem(key) || '');
+                if (data.timestamp && (now - data.timestamp > MAX_STORAGE_AGE)) {
+                    localStorage.removeItem(key);
+                }
+            } catch (e) {
+                // Remove corrupted entries
+                localStorage.removeItem(key);
+            }
+        }
+    });
 }
 
 export default function Editor({
@@ -46,8 +77,87 @@ export default function Editor({
     autoCompleteModel: AutoCompleteModel;
     editorStateRef: React.MutableRefObject<EditorState | null>;
 }) {
-    const urlParams = new URLSearchParams(window.location.search);
-    const storageKey = urlParams.get('key') || 'defaultKey';
+    const [storageKey, setStorageKey] = useState(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const key = urlParams.get('key');
+        if (!key) {
+            const newKey = generateKey();
+            // Update URL with new key
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.set('key', newKey);
+            window.history.pushState({}, '', newUrl);
+            return newKey;
+        }
+        return key;
+    });
+
+    // Update storage key when URL changes
+    useEffect(() => {
+        const handleUrlChange = () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const key = urlParams.get('key');
+            if (!key) {
+                const newKey = generateKey();
+                // Update URL with new key
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.set('key', newKey);
+                window.history.pushState({}, '', newUrl);
+                setStorageKey(newKey);
+            } else {
+                setStorageKey(key);
+            }
+        };
+
+        window.addEventListener('popstate', handleUrlChange);
+        return () => window.removeEventListener('popstate', handleUrlChange);
+    }, []);
+
+    // Periodic storage cleanup
+    useEffect(() => {
+        cleanupStorage();
+        const cleanup = setInterval(cleanupStorage, 24 * 60 * 60 * 1000); // Daily cleanup
+        return () => clearInterval(cleanup);
+    }, []);
+
+    const saveToStorage = useCallback((editorState: EditorState) => {
+        if (editorStateRef !== null) {
+            editorStateRef.current = editorState;
+            try {
+                const storageData: StorageData = {
+                    version: STORAGE_VERSION,
+                    timestamp: Date.now(),
+                    state: editorState
+                };
+                localStorage.setItem(
+                    `editor-${storageKey}`,
+                    JSON.stringify(storageData)
+                );
+            } catch (error) {
+                if (error instanceof Error) {
+                    if (error.name === 'QuotaExceededError') {
+                        console.warn('LocalStorage quota exceeded - cleaning up old entries');
+                        cleanupStorage();
+                        // Retry save after cleanup
+                        try {
+                            const storageData: StorageData = {
+                                version: STORAGE_VERSION,
+                                timestamp: Date.now(),
+                                state: editorState
+                            };
+                            localStorage.setItem(
+                                `editor-${storageKey}`,
+                                JSON.stringify(storageData)
+                            );
+                        } catch (retryError) {
+                            console.warn('LocalStorage save failed after cleanup:', retryError);
+                        }
+                    } else {
+                        console.warn('LocalStorage error:', error);
+                    }
+                }
+            }
+        }
+    }, [storageKey, editorStateRef]);
 
     const initialConfig = {
         editorState: null,
@@ -85,21 +195,7 @@ export default function Editor({
                         }
                         ErrorBoundary={LexicalErrorBoundary}
                     />
-                    <OnChangePlugin
-                        onChange={(editorState) => {
-                            if (editorStateRef !== null) {
-                                editorStateRef.current = editorState;
-                                try {
-                                    localStorage.setItem(
-                                        `editor-${storageKey}`,
-                                        JSON.stringify(editorState)
-                                    );
-                                } catch (error) {
-                                    console.warn('LocalStorage save failed:', error);
-                                }
-                            }
-                        }}
-                    />
+                    <OnChangePlugin onChange={saveToStorage} />
                     <LinkPlugin />
                     <HistoryPlugin />
                     <FloatingLinkEditorPlugin />
@@ -115,8 +211,8 @@ export default function Editor({
                     <CodeActionMenuPlugin />
                     <ListPlugin />
                     <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
-                    <LoadInitialStatePlugin />
-                    <BackendSyncPlugin />
+                    <LoadInitialStatePlugin storageKey={storageKey} />
+                    <BackendSyncPlugin storageKey={storageKey} />
                     {autoCompleteModel !== "none" && (
                         <AIAutoCompletePlugin
                             autoCompleteModel={autoCompleteModel}
