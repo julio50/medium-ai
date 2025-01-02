@@ -56,7 +56,9 @@ cd medium-ai
 
 ### Backend installation
 
-The frontend will run in itself, however if you would want to save the data and access AI features, the backend must be running.
+The frontend will run in itself. However, if you want to save data and access AI features, the backend must be running. The editor now also supports saving your work locally in your browser using the localStorage feature. Your documents are automatically saved as you type, and you can access them again later using the unique URL generated for each document.
+
+To utilize the backend for saving data and accessing AI features, follow the instructions below:
 
 Before running the backend, you need to configure your API settings. Create a file called `.env` inside the `backend/app/config` folder with the following configuration:
 
