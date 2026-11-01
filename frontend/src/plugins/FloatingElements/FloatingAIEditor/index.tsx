@@ -15,6 +15,9 @@ import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import CancelIcon from "@mui/icons-material/Cancel";
 import ErrorIcon from "@mui/icons-material/Error";
 import { AI_EDIT_ENDPOINT } from "../../../constants";
+import { modelParams, useAISettings } from "../../../ai/settings";
+import { isAbort, streamAI } from "../../../ai/stream";
+import { notify } from "../../../ai/activity";
 
 type FloatingAIEditorProps = {
     editor: LexicalEditor;
@@ -27,6 +30,7 @@ export default function FloatingAIEditor({
     anchorElem,
     setShowAIEditToolbar,
 }: FloatingAIEditorProps) {
+    const aiSettings = useAISettings();
     const editorToolbarRef = useRef<HTMLDivElement>(null);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const [instruction, setInstruction] = useState<string>("");
@@ -57,56 +61,64 @@ export default function FloatingAIEditor({
         if (selectedText === "" || instruction === "") {
             return;
         }
+        setIsLoading(true);
+        // Stream the edit straight into the document: the first chunk replaces
+        // the selection, later chunks append where the previous one ended.
+        let insertAt: RangeSelection | null = $isRangeSelection(currentSelection)
+            ? currentSelection.clone()
+            : null;
+        let closed = false;
         try {
-            setIsLoading(true);
-            const response = await fetch(AI_EDIT_ENDPOINT, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    instruction,
-                    temperature,
-                    selectedText,
-                }),
-            });
-            const data = await response.json();
-            if (response.ok) {
-                setIsLoading(false);
-                setIsFailed(false);
-                setTipsVisible(false);
-                if (!isMounted.current) {
-                    return;
+            await streamAI(
+                AI_EDIT_ENDPOINT,
+                { instruction, temperature, selectedText, ...modelParams(aiSettings) },
+                {
+                    label: "AI edit",
+                    onText: (chunk) => {
+                        if (!insertAt) return;
+                        const isFirstChunk = !closed;
+                        if (!closed) {
+                            closed = true;
+                            setIsLoading(false);
+                            setShowAIEditToolbar(false);
+                        }
+                        editor.update(
+                            () => {
+                                $setSelection(insertAt!.clone());
+                                const selection = $getSelection();
+                                if (!$isRangeSelection(selection)) return;
+                                // the toolbar highlights the selected text while it's
+                                // open; new text must not inherit that format
+                                if (selection.hasFormat("highlight")) {
+                                    selection.toggleFormat("highlight");
+                                }
+                                selection.insertText(chunk);
+                                const after = $getSelection();
+                                insertAt = $isRangeSelection(after) ? after.clone() : null;
+                            },
+                            // merge the chunks into a single undo step
+                            { tag: isFirstChunk ? undefined : "history-merge" }
+                        );
+                    },
                 }
-                editor.update(() => {
-                    if ($isRangeSelection(currentSelection)) {
-                        $setSelection(currentSelection.clone());
-                        const selection = $getSelection();
-                        selection?.insertText(data["edited_text"]);
-                        setShowAIEditToolbar(false);
-                    }
-                });
-            } else {
-                setIsLoading(false);
-                setIsFailed(true);
-                setErrorMessage(
-                    "statusCode: " +
-                        response.status +
-                        ", " +
-                        response.statusText +
-                        "." +
-                        "\n" +
-                        data["detail"]
-                );
-                setTipsVisible(true);
-            }
+            );
+            if (!isMounted.current) return;
+            setIsLoading(false);
+            setIsFailed(false);
+            setTipsVisible(false);
         } catch (e) {
-            if (e instanceof Error) {
-                setErrorMessage(e.message);
-                setTipsVisible(true);
+            if (isAbort(e)) return;
+            const message = e instanceof Error ? e.message : String(e);
+            if (closed) {
+                // part of the edit is already in the document; the toolbar is gone
+                notify(`AI edit stopped early: ${message} Press Ctrl+Z to undo it.`);
+                return;
             }
+            if (!isMounted.current) return;
             setIsLoading(false);
             setIsFailed(true);
+            setErrorMessage(e instanceof Error ? e.message : String(e));
+            setTipsVisible(true);
         }
     };
 

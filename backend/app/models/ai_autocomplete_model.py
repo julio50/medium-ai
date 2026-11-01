@@ -1,20 +1,13 @@
+from typing import Literal, Optional
 from pydantic import BaseModel
-from typing import Literal
 
 
 class AIAutoSuggest(BaseModel):
     previousContext: str
     currentContext: str
     nextContext: str
-    modelName: Literal[
-        "text-davinci-003",
-        "text-davinci-002",
-        "text-davinci-001",
-        "text-curie-001",
-        "text-babbage-001",
-        "text-ada-001",
-        "davinci",
-        "curie",
-        "babbage",
-        "ada",
-    ]
+    modelName: Optional[str] = None
+    thinking: bool = False  # legacy on/off (on = high)
+    thinkingLevel: Optional[Literal["off", "low", "medium", "high"]] = None
+    # explicit request (Ctrl+Space): suggest even with little context
+    force: bool = False

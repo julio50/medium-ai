@@ -1,200 +1,160 @@
-import os
-import tiktoken
-from openai import OpenAI
+from __future__ import annotations
+
 import logging
-from app.services.ai_edit import remove_newlines_and_spaces
-from app.config.config_files import OpenAIConfig
+import re
+from typing import Iterator
+from app.services.json_stream import JsonStream
+from app.services.llm import Event, obj_schema, resolve_model, stream_chat
 
-logging.basicConfig(level=logging.DEBUG)
+CHARS_PER_TOKEN = 4
 
-logging.debug(f"Initializing OpenAI client with base_url: {OpenAIConfig.base_url}")
-logging.debug(f"Using model: {OpenAIConfig.model}")
-logging.debug(f"API key present: {bool(OpenAIConfig.api_key)}")
+# Don't suggest until the document says enough to know what it's about
+# (e.g. "hi there" gets nothing). A manual request (Ctrl+Space) skips this.
+MIN_CONTEXT_WORDS = 12
 
-client = OpenAI(
-    api_key=OpenAIConfig.api_key,
-    base_url=OpenAIConfig.base_url,
+SYSTEM_PROMPT = (
+    "You are a writing autocomplete engine. Continue the user's text naturally, "
+    "matching its style, tone and topic. Answer in JSON. Put ONLY the "
+    "continuation in `text`: never repeat the text you were given, no quotes, "
+    "no explanations. If the text is too short or vague to tell what the writer "
+    "is going to say, don't guess: set `skip` to true and leave `text` empty."
 )
 
-logging.debug(f"OpenAI client initialized with base_url: {client.base_url}")
+# skip comes first so a "no idea" answer is known before any text streams
+SCHEMA = obj_schema(skip={"type": "boolean"}, text={"type": "string"})
+# room left in the context window for the answer when clipping the input
+# (this only limits how much of the document is sent, not the output)
+ANSWER_RESERVE_TOKENS = 512
 
-def num_tokens_from_string(string: str) -> int:
-    """Returns the number of tokens in a text string."""
-    # Always use text-curie-001 for token estimation
-    encoding = tiktoken.encoding_for_model("text-curie-001")
-    num_tokens = len(encoding.encode(string))
-    return num_tokens
+
+ECHO_WORDS = 8  # longest repeat of the prompt's ending we look for
+
+
+def _norm(word: str) -> str:
+    return word.lower().strip(".,;:!?\"'")
+
+
+def strip_echo(prompt: str, answer: str) -> str:
+    """Drop words at the start of `answer` that repeat the end of `prompt`
+    ("...is to" + "to focus" -> "focus"; "hi there" + "hi there, how" -> "how")."""
+    p_words, a_words = prompt.split(), answer.split()
+    for k in range(min(ECHO_WORDS, len(p_words), len(a_words)), 0, -1):
+        if [_norm(w) for w in p_words[-k:]] == [_norm(w) for w in a_words[:k]]:
+            # cut through the k-th word (and trailing punctuation/space)
+            m = re.match(r"\s*" + r"\s+".join(r"\S+" for _ in range(k)) + r"\s*", answer)
+            rest = answer[m.end():] if m else answer
+            return rest.lstrip(",;: ")
+    return answer
+
+
+def has_enough_context(*texts: str) -> bool:
+    return sum(len(t.split()) for t in texts) >= MIN_CONTEXT_WORDS
+
 
 def clip_context(
     previous_context: str,
     current_context: str,
     next_context: str,
-    max_tokens: int,
+    max_tokens: int = 128,
     max_length: int = 8192,
-):
-    """
-    Combine and clip all the contexts to max_length.
-    """
-    # Always use text-curie-001 for tokenization
-    model_name = "text-curie-001"
-    if "davinci" in model_name:
-        max_length = 4096
+) -> dict:
+    """Fit previous/current/next context into the model's window (in tokens,
+    estimated from characters). The text nearest the cursor is kept first."""
+    budget = (max_length - max_tokens) * CHARS_PER_TOKEN
 
-    # subtract max_tokens from max_length to account for the tokens in the current context
-    max_length = max_length - max_tokens
+    if len(current_context) >= budget:
+        return {"prompt": current_context[-budget:], "suffix": ""}
+    budget -= len(current_context)
 
-    result = {"prompt": "", "suffix": ""}
+    if len(previous_context) >= budget:
+        return {"prompt": previous_context[-budget:] + current_context, "suffix": ""}
+    budget -= len(previous_context)
 
-    encoding = tiktoken.encoding_for_model(model_name)
-    current_context_tokens = encoding.encode(current_context)
-    if len(current_context_tokens) > max_length:
-        current_context_tokens = current_context_tokens[
-            len(current_context_tokens) - max_length :
-        ]
-        result["prompt"] = encoding.decode(current_context_tokens)
-        return result
-    else:
-        previous_context_tokens = encoding.encode(previous_context)
-        if len(previous_context_tokens) + len(current_context_tokens) > max_length:
-            previous_context_tokens = previous_context_tokens[
-                len(previous_context_tokens)
-                + len(current_context_tokens)
-                - max_length :
-            ]
-            result["prompt"] = encoding.decode(
-                previous_context_tokens + current_context_tokens
-            )
+    return {
+        "prompt": previous_context + current_context,
+        "suffix": next_context[:budget],
+    }
 
-            return result
 
-        next_context_tokens = encoding.encode(next_context)
-        if (
-            len(previous_context_tokens)
-            + len(current_context_tokens)
-            + len(next_context_tokens)
-            > max_length
-        ):
-            next_context_tokens = next_context_tokens[
-                : max_length
-                - len(previous_context_tokens)
-                - len(current_context_tokens)
-            ]
-
-            result["prompt"] = encoding.decode(
-                previous_context_tokens + current_context_tokens
-            )
-            result["suffix"] = encoding.decode(next_context_tokens)
-
-            return result
-
-        result["prompt"] = previous_context + current_context
-        result["suffix"] = next_context
-        return result
-
-def openai_completion(
-    result: dict, max_tokens: int, model_name: str
-):
-    logging.debug(f"openai_completion - result: {result}, max_tokens: {max_tokens}, model_name: {model_name}")
-    is_space_at_end = result["prompt"].endswith(" ")
-    # getting better results if we remove space at the end
-    prompt = result["prompt"].rstrip()
-
-    suffix = result["suffix"].lstrip() if len(result["suffix"]) > 0 else ""
-    input_text = suffix + prompt
-
-    logging.debug(f"openai_completion - Sending request to {client.base_url}")
-    logging.debug(f"openai_completion - Using model {model_name}")
-    try:
-        res = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an intelligent text completion assistant. Your task is to continue the user's writing in a natural and coherent way. Focus on maintaining the writing style and context of the provided text. Only provide the completion text - do not repeat the input or add any explanations. Return plain text that flows seamlessly from the input."
-                },
-                {
-                    "role": "user",
-                    "content": f"Only return what comes after. Complete this text: {input_text}"
-                }
-            ],
-            max_tokens=max_tokens,
-            temperature=0.7,
-            stop=["\n"]
-        )
-        logging.debug(f"openai_completion - Request successful")
-    except Exception as e:
-        logging.error(f"openai_completion - Error making request: {str(e)}")
-        raise e
-
-    logging.debug(f"openai_completion - OpenAI API response: {res}")
-    res_text = res.choices[0].message.content
-
-    # post processing
-
-    # remove new lines and spaces from the end of the autocomplete response
-    res_text = remove_newlines_and_spaces(res_text)
-    # remove tabs from the autocomplete response
-    res_text = res_text.replace("\t", "")
-    
-    # prepend a space to the autocomplete response
-    res_text = " " + res_text
-
-    if is_space_at_end:
-        res_text = res_text.lstrip()
-
-    # Subtract input text from res_text if present
-    if input_text in res_text:
-        res_text = res_text.replace(input_text, '')
-
-    return res_text
-
-def fetch_autocomplete_response(
+def stream_autocomplete(
     previous_context: str,
     current_context: str,
     next_context: str,
-    min_tokens: int = 16,
-    max_tokens: int = 128,
-):
-    """
-    Parameters
-    -----------
+    model_name: str | None = None,
+    thinking: str = "off",  # thinking level
+    force: bool = False,
+) -> Iterator[Event]:
+    """Yields think/text events; the text is one line that continues the prompt.
+    Yields nothing when there isn't enough context (unless `force`) or the model
+    declines with [SKIP]."""
+    if not force and not has_enough_context(previous_context, current_context, next_context):
+        return
+    model, uses_thinking = resolve_model(model_name, thinking != "off")
+    level = thinking if uses_thinking else "off"
+    context = clip_context(previous_context, current_context, next_context, max_tokens=ANSWER_RESERVE_TOKENS)
+    prompt = context["prompt"]
+    is_space_at_end = prompt.endswith(" ")
+    prompt = prompt.rstrip()
+    suffix = context["suffix"].strip()
+    logging.debug(f"autocomplete model={model} prompt_chars={len(prompt)}")
 
-    previous_context: str
-        The text that comes before the current context.
-    current_context: str
-        The current text being typed by the user.
-    next_context: str
-        The text that comes after the current context.
-    min_tokens: int
-        minimum number of tokens required to trigger the autocomplete response.
-    max_tokens: int
-        maximum number of tokens the model will return in the autocomplete response.
-    """
-    model_name = OpenAIConfig.model
-    logging.debug(
-        f"fetch_autocomplete_response - "
-        f"previous_context: '{previous_context}', "
-        f"current_context: '{current_context}', "
-        f"next_context: '{next_context}', "
-        f"min_tokens: {min_tokens}, "
-        f"max_tokens: {max_tokens}"
-    )
-    parsed_context = clip_context(
-        previous_context,
-        current_context,
-        next_context,
-        max_tokens=max_tokens,
-    )
-    logging.debug(f"fetch_autocomplete_response - parsed_context: {parsed_context}")
-    text_total = parsed_context["prompt"] + parsed_context["suffix"]
-    n_tokens = num_tokens_from_string(text_total)
-    logging.debug(f"fetch_autocomplete_response - n_tokens: {n_tokens}")
+    user_msg = f"Text so far:\n{prompt}"
+    if suffix:
+        user_msg += f"\n\n(The document continues later with:\n{suffix}\n)"
+    user_msg += "\n\nWrite the next few words/sentence that come right after 'Text so far'."
 
-    logging.debug(f"fetch_autocomplete_response - OpenAIConfig.base_url: {OpenAIConfig.base_url}")
-    logging.debug(f"fetch_autocomplete_response - OpenAIConfig.model: {OpenAIConfig.model}")
-    
-    # Always try to get a completion regardless of token count
-    autocomplete_text = openai_completion(
-        parsed_context, max_tokens=max_tokens, model_name=model_name
-    )
-    return autocomplete_text
+    def answer() -> Iterator[Event]:
+        """think events, then the `text` field as it streams (nothing if skip)."""
+        js = JsonStream()
+        for kind, piece in stream_chat(
+            model,
+            [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user_msg}],
+            temperature=0.7,
+            thinking=level,
+            schema=SCHEMA,
+        ):
+            if kind == "think":
+                yield (kind, piece)
+                continue
+            for ev in js.feed(piece):
+                if ev[0] == "value" and ev[1] == ("skip",) and ev[2] is True:
+                    return  # the model has no idea yet: suggest nothing
+                if ev[1] == ("text",):
+                    if ev[0] == "str_end":
+                        return
+                    yield ("text", ev[2])
+
+    def opening(lead: str) -> str | None:
+        """Clean up the held start of the answer. None = suggest nothing."""
+        probe = strip_echo(prompt, lead.lstrip().lstrip('"'))
+        if not probe:
+            return None
+        if not is_space_at_end and probe[0] not in ".,;:!?)'":
+            probe = " " + probe
+        return probe
+
+    lead: str | None = ""  # start of the answer, held until we can check it for an echo
+    for kind, piece in answer():
+        if kind == "think":
+            yield (kind, piece)
+            continue
+        piece = piece.replace("\t", "")
+        if lead is not None:
+            lead += piece
+            # hold until enough words arrive to compare with the prompt's ending
+            if len(lead.split()) <= min(ECHO_WORDS, len(prompt.split())) and len(lead) < 80 and "\n" not in lead:
+                continue
+            piece, lead = opening(lead), None
+            if piece is None:
+                return
+        if "\n" in piece:
+            head = piece.split("\n")[0].rstrip('"')
+            if head.strip():
+                yield ("text", head)
+            return
+        if piece:
+            yield ("text", piece)
+    if lead:  # short answer that never filled the echo check
+        piece = opening(lead)
+        if piece:
+            yield ("text", piece.split("\n")[0].rstrip('"'))

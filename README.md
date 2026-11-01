@@ -20,6 +20,14 @@ As soon as you start typing into the editor, the article context is taken and pa
 
 To edit text, select it and enter the desired instruction in the toolbar's text field. The editor will then automatically execute the instruction and update the selected text with the result.
 
+### Voice brain-dump
+
+Click the mic (bottom-right) or press `Alt+V`, talk, then press it again. The recording is transcribed by `whisper-1` on your AI server and inserted after the paragraph your cursor is in. With **Tidy** on, it's first cleaned up into bullet points. Press `Esc` while recording to discard it. The microphone only works on `http://localhost` or https.
+
+### Thinking
+
+Models that come in pairs (`spark` / `spark-instruct`) show up once in the model menu. The **Thinking** toggle picks the thinking variant (`spark`) or the fast one (`spark-instruct`). Thinking runs with no token limit. Its reasoning streams into an indicator in the bottom-left corner (click "more" to read it all) and never goes into your document. Click **Cancel** to stop it.
+
 ## Getting started
 
 1. Clone the repository.
@@ -60,18 +68,15 @@ The frontend will run in itself. However, if you want to save data and access AI
 
 To utilize the backend for saving data and accessing AI features, follow the instructions below:
 
-Before running the backend, you need to configure your API settings. Create a file called `.env` inside the `backend/app/config` folder with the following configuration:
+Before running the backend, copy `.env.example` to `.env` in the project root and set your server:
 
 ```shell
-OPENAI_KEY=your_api_key
-OPENAI_BASE_URL=https://your.api.endpoint
-OPENAI_MODEL=your_model_name
+OPENAI_BASE_URL=http://192.168.1.158:8080/v1   # any OpenAI-compatible server
+OPENAI_MODEL=spark                              # default model
+OPENAI_API_KEY=your-key                         # use any value if your server has no auth
 ```
 
-You can use:
-- Official OpenAI API (https://api.openai.com/v1)
-- LocalAI (http://localhost:8080/v1)
-- Any other OpenAI compatible API
+The model dropdown in the top-right is filled from the server's `/v1/models` list (embedding, TTS, OCR and image models are filtered out). "Thinking" is disabled on reasoning models so suggestions stay fast.
    
    ```
    Folder Structure:

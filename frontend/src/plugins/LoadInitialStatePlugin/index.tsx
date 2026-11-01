@@ -3,53 +3,37 @@ import { LOAD_ENDPOINT } from "../../constants";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $nodesOfType, $getRoot, EditorState, LexicalEditor, TextNode } from "lexical";
 import { reduceParagraphMargin } from "../EditorBehaviourPlugin";
+import { readStoredState, SerializedState } from "../../utils/editorStorage";
 
 interface LoadInitialStatePluginProps {
     storageKey: string;
-}
-
-interface StorageData {
-    version: string;
-    timestamp: number;
-    state: any;
 }
 
 export default function LoadInitialStatePlugin({ storageKey }: LoadInitialStatePluginProps) {
     const [initialState, setInitialState] = useState<EditorState | null>(null);
     const [editor] = useLexicalComposerContext();
 
-    const loadState = async () => {
-        try {
-            // Try localStorage first
-            const localData = localStorage.getItem(`editor-${storageKey}`);
-            if (localData) {
-                try {
-                    const parsedData = JSON.parse(localData) as StorageData;
-                    // Validate storage data structure
-                    if (parsedData.version && parsedData.timestamp && parsedData.state) {
-                        return parsedData.state;
-                    }
-                } catch (e) {
-                    console.warn('Invalid localStorage data:', e);
-                    // Remove corrupted data
-                    localStorage.removeItem(`editor-${storageKey}`);
-                }
+    const loadState = async (): Promise<SerializedState | null> => {
+        // Try localStorage first. Unreadable entries are left alone (never
+        // deleted), so nothing is lost if this code can't parse them.
+        const localData = localStorage.getItem(`editor-${storageKey}`);
+        if (localData) {
+            try {
+                const state = readStoredState(JSON.parse(localData));
+                if (state) return state;
+            } catch (e) {
+                console.warn("Invalid localStorage data:", e);
             }
-
-            // Then try backend
-            const response = await fetch(LOAD_ENDPOINT);
-            if (response.ok) {
-                const data = await response.json();
-                return data;
-            }
-            
-            // Return null for new documents or when no state is found
-            return null;
-            
-        } catch (e) {
-            console.warn("Error loading state:", e);
-            return null;
         }
+
+        // Then try the backend (accepts every format it has ever saved)
+        try {
+            const response = await fetch(LOAD_ENDPOINT);
+            if (response.ok) return readStoredState(await response.json());
+        } catch (e) {
+            console.warn("Error loading state from backend:", e);
+        }
+        return null;
     };
 
     const removeHighlight = (editor: LexicalEditor) => {
@@ -77,10 +61,17 @@ export default function LoadInitialStatePlugin({ storageKey }: LoadInitialStateP
     useEffect(() => {
         if (initialState === null) {
             loadState().then((data) => {
+                let parsed: EditorState | null = null;
                 if (data) {
-                    setInitialState(data);
-                    const initialEditorState = editor.parseEditorState(data);
-                    editor.setEditorState(initialEditorState);
+                    try {
+                        parsed = editor.parseEditorState(JSON.stringify(data));
+                    } catch (e) {
+                        console.warn("Saved document couldn't be loaded:", e);
+                    }
+                }
+                if (parsed) {
+                    setInitialState(parsed);
+                    editor.setEditorState(parsed);
                     removeHighlight(editor);
                     reduceParagraphMarginOnLoad(editor);
                 } else {

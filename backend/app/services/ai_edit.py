@@ -1,79 +1,60 @@
-from openai import OpenAI
-import re
-from app.config.config_files import OpenAIConfig
+from __future__ import annotations
 
-client = OpenAI(
-    api_key=OpenAIConfig.api_key,
-    base_url=OpenAIConfig.base_url,
+from typing import Iterator
+from app.services.json_stream import JsonStream
+from app.services.llm import Event, obj_schema, resolve_model, stream_chat
+
+SYSTEM_PROMPT = (
+    "You are an editor helping a writer. Apply the instruction to the text. "
+    "Answer in JSON: put ONLY the resulting text in `text`, with no preamble, "
+    "no surrounding quotes and no explanations."
 )
 
-
-def remove_newlines_and_spaces(string):
-    pattern = r"\s+$"
-    return re.sub(pattern, "", string)
+SCHEMA = obj_schema(text={"type": "string"})
 
 
-def remove_quotes(string):
-    """
-    remove single and double quotes from the extreme ends of the string
-    """
-    pattern = r"^['\"]|['\"]$"
-    return re.sub(pattern, "", string)
-
-
-def edit_text_chat_completion(
+def stream_edit_text(
     instruction: str,
     selected_text: str,
     temperature: float,
-):
-    response = client.chat.completions.create(
-        model=OpenAIConfig.model,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful assistant to a writer. ONLY edit the text as instructed.",
-            },
-            {
-                "role": "user",
-                "content": "Edit the following text: "
-                f"{selected_text}" + "\n" + f"{instruction}",
-            },
-        ],
-        temperature=temperature / 100,
-    )
+    model_name: str | None = None,
+    thinking: str = "off",  # thinking level
+) -> Iterator[Event]:
+    model, uses_thinking = resolve_model(model_name, thinking != "off")
+    level = thinking if uses_thinking else "off"
+    def events() -> Iterator[Event]:
+        js = JsonStream()
+        for kind, piece in stream_chat(
+            model,
+            [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"Instruction: {instruction}\n\nText:\n{selected_text}"},
+            ],
+            temperature=temperature / 100,
+            thinking=level,
+            schema=SCHEMA,
+        ):
+            if kind == "think":
+                yield (kind, piece)
+                continue
+            for ev in js.feed(piece):
+                if ev[0] == "str" and ev[1] == ("text",):
+                    yield ("text", ev[2])
 
-    response_text = response.choices[0].message.content
-
-    # post processing
-    response_text = remove_newlines_and_spaces(response_text)
-    response_text = response_text.replace("\t", "")
-    response_text = remove_quotes(response_text)
-
-    return response_text
-
-
-def edit_text(instruction: str, selected_text: str, temperature: float):
-    response = client.chat.completions.create(
-        model=OpenAIConfig.model,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful assistant to a writer. ONLY edit the text as instructed. Return plain text.",
-            },
-            {
-                "role": "user",
-                "content": "Edit the following text: "
-                f"{selected_text}" + "\n" + f"{instruction}",
-            },
-        ],
-        temperature=temperature / 100,
-    )
-
-    # remove /n and spaces from the end of the response
-    response_text = response.choices[0].message.content
-    response_text = remove_newlines_and_spaces(response_text)
-
-    # remove /t from the response
-    response_text = response_text.replace("\t", "")
-
-    return response_text
+    # Pass the `text` field through unchanged (trimming leading whitespace
+    # and holding back trailing whitespace, which a replacement shouldn't end with)
+    held, started = "", False
+    for kind, piece in events():
+        if kind == "think":
+            yield (kind, piece)
+            continue
+        if not started:
+            piece = piece.lstrip()
+            if not piece:
+                continue
+            started = True
+        text = held + piece
+        stripped = text.rstrip()
+        held = text[len(stripped):]
+        if stripped:
+            yield ("text", stripped)

@@ -10,6 +10,7 @@ import {
     RangeSelection,
     SELECTION_CHANGE_COMMAND,
     $isParagraphNode,
+    $getNodeByKey,
 } from "lexical";
 
 import {
@@ -30,56 +31,82 @@ import {
 import { $isHeadingNode, $isQuoteNode } from "@lexical/rich-text";
 import { AutoCompleteModel } from "../../components/MenuBar";
 
-import { AUTOCOMPLETE_ENDPOINT, WAIT_TIME } from "../../constants";
-
-type AutoCompleteResponse = {
-    message: string;
-};
+import { AUTOCOMPLETE_ENDPOINT, MIN_CONTEXT_WORDS, WAIT_TIME } from "../../constants";
+import { AISettings, modelParams, useAISettings } from "../../ai/settings";
+import { isAbort, streamAI } from "../../ai/stream";
 
 type Context = {
     previousContext: string;
     nextContext: string;
     currentContext: string;
-    modelName: AutoCompleteModel;
+    force?: boolean;
 };
 
-async function getAutoCompleteSuggestions(
-    context: Context
-): Promise<AutoCompleteResponse | null> {
-    let response;
-    try {
-        response = await fetch(AUTOCOMPLETE_ENDPOINT, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(context),
-        });
-    } catch (e) {
-        return null;
-    }
-    if (response.ok) {
-        const json = await response.json();
-        return json;
-    }
+const wordCount = (...texts: string[]) =>
+    texts.reduce((n, t) => n + (t.match(/\S+/g)?.length ?? 0), 0);
 
-    return null;
+// Only one suggestion is in flight at a time: a new one cancels the last.
+let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingController: AbortController | null = null;
+
+function cancelPendingSuggestion() {
+    if (pendingTimer !== null) clearTimeout(pendingTimer);
+    pendingTimer = null;
+    pendingController?.abort();
+    pendingController = null;
 }
 
-const getAutoCompleteSuggestionsDebounced = (() => {
-    let timeout: ReturnType<typeof setTimeout> | null = null;
-    return async (context: Context) => {
-        if (timeout !== null) {
-            clearTimeout(timeout);
-        }
-        return new Promise((resolve) => {
-            timeout = setTimeout(async () => {
-                const suggestions = await getAutoCompleteSuggestions(context);
-                resolve(suggestions);
-            }, WAIT_TIME);
+/**
+ * After the debounce, stream a suggestion into a ghost AutoCompleteNode after
+ * `anchorNode`. Each chunk swaps in a fresh node with the text so far (a fresh,
+ * uncommitted node survives the RootNode transform that clears stale ones).
+ */
+function requestSuggestion(
+    editor: LexicalEditor,
+    context: Context,
+    settings: AISettings,
+    anchorNode: LexicalNode,
+    selection: RangeSelection
+) {
+    cancelPendingSuggestion();
+    const controller = new AbortController();
+    pendingController = controller;
+    pendingTimer = setTimeout(() => {
+        let ghostKey: NodeKey | null = null;
+        streamAI(
+            AUTOCOMPLETE_ENDPOINT,
+            { ...context, ...modelParams(settings) },
+            {
+                label: "Autosuggest",
+                signal: controller.signal,
+                onText: (_chunk, fullText) => {
+                    editor.update(
+                        () => {
+                            // the cursor must still be at the end of the same text node
+                            if (!$isSameSelection(selection) || $getNodeByKey(anchorNode.getKey()) === null) {
+                                controller.abort(); // the user moved on
+                                return;
+                            }
+                            const ghost = $createAutoCompleteNode(fullText);
+                            const existing = ghostKey ? $getNodeByKey(ghostKey) : null;
+                            if (existing) {
+                                existing.replace(ghost);
+                            } else {
+                                anchorNode.getLatest().insertAfter(ghost, false);
+                            }
+                            ghostKey = ghost.getKey();
+                            anchorNode.getLatest().select();
+                        },
+                        // ghost text isn't the user's writing: keep it out of undo history
+                        { tag: "historic" }
+                    );
+                },
+            }
+        ).catch((e) => {
+            if (!isAbort(e)) console.log("Autosuggest failed:", e);
         });
-    };
-})();
+    }, WAIT_TIME);
+}
 
 function $isSameSelection(selection: RangeSelection): boolean {
     const currentSelection = $getSelection();
@@ -87,8 +114,11 @@ function $isSameSelection(selection: RangeSelection): boolean {
         return false;
     }
 
+    // same node AND same offset (offset alone matches other paragraphs too)
     return (
         selection.isCollapsed() &&
+        currentSelection.isCollapsed() &&
+        selection.anchor.key === currentSelection.anchor.key &&
         selection.anchor.offset === currentSelection.anchor.offset
     );
 }
@@ -195,10 +225,8 @@ const handleSelectionChange = (editor: LexicalEditor) => {
     return false;
 };
 
-const insertAIAutoComplete = (
-    editor: LexicalEditor,
-    autoCompleteModel: AutoCompleteModel
-) => {
+/** `manual` = the user asked (Ctrl+Space): suggest even with little context */
+const insertAIAutoComplete = (editor: LexicalEditor, settings: AISettings, manual = false) => {
     deleteAutoCompleteNodes(editor);
 
     const selection = $getSelection();
@@ -242,44 +270,24 @@ const insertAIAutoComplete = (
                 nextContext;
         }
 
-        const context = {
-            previousContext,
-            currentContext,
-            nextContext,
-            modelName: autoCompleteModel,
-        };
-
-        if (currentContext.length > 0) {
-            getAutoCompleteSuggestionsDebounced(context)
-                .then((suggestions) => {
-                    if (suggestions !== null) {
-                        const receivedText = (
-                            suggestions as AutoCompleteResponse
-                        ).message;
-                        editor.update(() => {
-                            if (!$isSameSelection(selection)) {
-                                return;
-                            }
-                            const autoCompleteNode =
-                                $createAutoCompleteNode(receivedText);
-                            anchorNode.insertAfter(autoCompleteNode, false);
-                            anchorNode.select();
-                        });
-                    }
-                })
-                .catch((error) => {
-                    console.log(error);
-                });
+        // Don't guess until the page says enough to know what it's about
+        const enoughContext =
+            wordCount(previousContext, currentContext, nextContext) >= MIN_CONTEXT_WORDS;
+        if (currentContext.length > 0 && (manual || enoughContext)) {
+            requestSuggestion(
+                editor,
+                { previousContext, currentContext, nextContext, force: manual },
+                settings,
+                anchorNode,
+                selection
+            );
         }
     }
 };
 
-const insertAIAutoCompleteTransform = (
-    editor: LexicalEditor,
-    autoCompleteModel: AutoCompleteModel
-) => {
+const insertAIAutoCompleteTransform = (editor: LexicalEditor, settings: AISettings) => {
     return editor.registerNodeTransform(RootNode, () =>
-        insertAIAutoComplete(editor, autoCompleteModel)
+        insertAIAutoComplete(editor, settings)
     );
 };
 
@@ -289,6 +297,8 @@ export default function AIAutoCompletePlugin({
     autoCompleteModel: AutoCompleteModel;
 }) {
     const [editor] = useLexicalComposerContext();
+    const { thinking } = useAISettings();
+    const settings: AISettings = { model: autoCompleteModel, thinking };
 
     // trigger function when user presses ctrl+space
     useEffect(() => {
@@ -296,7 +306,7 @@ export default function AIAutoCompletePlugin({
             if (event.ctrlKey && event.key === " ") {
                 event.preventDefault();
                 editor.update(() => {
-                    insertAIAutoComplete(editor, autoCompleteModel);
+                    insertAIAutoComplete(editor, settings, true);
                 });
             }
         };
@@ -304,11 +314,13 @@ export default function AIAutoCompletePlugin({
         return () => {
             document.removeEventListener("keydown", handleKeyDown);
         };
-    }, [editor, autoCompleteModel]);
+    }, [editor, autoCompleteModel, thinking]);
+
+    useEffect(() => cancelPendingSuggestion, [autoCompleteModel, thinking]);
 
     useEffect(() => {
         return mergeRegister(
-            insertAIAutoCompleteTransform(editor, autoCompleteModel),
+            insertAIAutoCompleteTransform(editor, settings),
             editor.registerCommand(
                 SELECTION_CHANGE_COMMAND,
                 () => {
@@ -329,6 +341,6 @@ export default function AIAutoCompletePlugin({
                 COMMAND_PRIORITY_LOW
             )
         );
-    }, [editor, autoCompleteModel]);
+    }, [editor, autoCompleteModel, thinking]);
     return null;
 }

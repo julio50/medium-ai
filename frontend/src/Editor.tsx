@@ -33,41 +33,16 @@ import { AutoCompleteModel } from "./components/MenuBar";
 import { EditorState } from "lexical";
 import LoadInitialStatePlugin from "./plugins/LoadInitialStatePlugin";
 import BackendSyncPlugin from "./plugins/BackendSyncPlugin";
-import { useRef, useEffect, useState, useCallback } from "react";
-
-function Placeholder() {
-    return <></>;
-}
-
-// Storage utilities
-const STORAGE_VERSION = '1.0';
-const MAX_STORAGE_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-interface StorageData {
-    version: string;
-    timestamp: number;
-    state: any;
-}
+import { toStoredDocument } from "./utils/editorStorage";
+import VoiceDumpPlugin from "./plugins/VoiceDumpPlugin";
+import { useEffect, useState, useCallback } from "react";
 
 function generateKey() {
     return Math.random().toString(36).substring(2, 15);
 }
 
-function cleanupStorage() {
-    const now = Date.now();
-    Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('editor-')) {
-            try {
-                const data = JSON.parse(localStorage.getItem(key) || '');
-                if (data.timestamp && (now - data.timestamp > MAX_STORAGE_AGE)) {
-                    localStorage.removeItem(key);
-                }
-            } catch (e) {
-                // Remove corrupted entries
-                localStorage.removeItem(key);
-            }
-        }
-    });
+function Placeholder() {
+    return <></>;
 }
 
 export default function Editor({
@@ -112,52 +87,22 @@ export default function Editor({
         return () => window.removeEventListener('popstate', handleUrlChange);
     }, []);
 
-    // Periodic storage cleanup
-    useEffect(() => {
-        cleanupStorage();
-        const cleanup = setInterval(cleanupStorage, 24 * 60 * 60 * 1000); // Daily cleanup
-        return () => clearInterval(cleanup);
-    }, []);
-
-    const saveToStorage = useCallback((editorState: EditorState) => {
-        if (editorStateRef !== null) {
-            editorStateRef.current = editorState;
-            try {
-                const storageData: StorageData = {
-                    version: STORAGE_VERSION,
-                    timestamp: Date.now(),
-                    state: editorState
-                };
-                localStorage.setItem(
-                    `editor-${storageKey}`,
-                    JSON.stringify(storageData)
-                );
-            } catch (error) {
-                if (error instanceof Error) {
-                    if (error.name === 'QuotaExceededError') {
-                        console.warn('LocalStorage quota exceeded - cleaning up old entries');
-                        cleanupStorage();
-                        // Retry save after cleanup
-                        try {
-                            const storageData: StorageData = {
-                                version: STORAGE_VERSION,
-                                timestamp: Date.now(),
-                                state: editorState
-                            };
-                            localStorage.setItem(
-                                `editor-${storageKey}`,
-                                JSON.stringify(storageData)
-                            );
-                        } catch (retryError) {
-                            console.warn('LocalStorage save failed after cleanup:', retryError);
-                        }
-                    } else {
-                        console.warn('LocalStorage error:', error);
-                    }
-                }
+    // Documents are kept in localStorage until the user deletes them (no
+    // age-based cleanup: an untouched note must never silently disappear).
+    const saveToStorage = useCallback(
+        (editorState: EditorState) => {
+            if (editorStateRef !== null) {
+                editorStateRef.current = editorState;
             }
-        }
-    }, [storageKey, editorStateRef]);
+            try {
+                localStorage.setItem(`editor-${storageKey}`, JSON.stringify(toStoredDocument(editorState)));
+            } catch (error) {
+                // e.g. QuotaExceededError: keep working; the backend sync still has a copy
+                console.warn("LocalStorage save failed:", error);
+            }
+        },
+        [storageKey, editorStateRef]
+    );
 
     const initialConfig = {
         editorState: null,
@@ -195,7 +140,8 @@ export default function Editor({
                         }
                         ErrorBoundary={LexicalErrorBoundary}
                     />
-                    <OnChangePlugin onChange={saveToStorage} />
+                    {/* history-merge updates (e.g. streamed AI edits) must be saved too */}
+                    <OnChangePlugin onChange={saveToStorage} ignoreHistoryMergeTagChange={false} />
                     <LinkPlugin />
                     <HistoryPlugin />
                     <FloatingLinkEditorPlugin />
@@ -213,6 +159,7 @@ export default function Editor({
                     <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
                     <LoadInitialStatePlugin storageKey={storageKey} />
                     <BackendSyncPlugin storageKey={storageKey} />
+                    <VoiceDumpPlugin />
                     {autoCompleteModel !== "none" && (
                         <AIAutoCompletePlugin
                             autoCompleteModel={autoCompleteModel}

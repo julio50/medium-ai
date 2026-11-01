@@ -1,60 +1,34 @@
 import { useEffect } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { SAVE_ENDPOINT } from "../../constants";
+import { serializeEditorState, STORAGE_VERSION } from "../../utils/editorStorage";
 
 interface BackendSyncPluginProps {
     storageKey: string;
 }
 
-interface StorageData {
-    version: string;
-    timestamp: number;
-    state: any;
-}
-
+/** Every 30s, send the current document to the backend if it changed. */
 export default function BackendSyncPlugin({ storageKey }: BackendSyncPluginProps) {
     const [editor] = useLexicalComposerContext();
 
     useEffect(() => {
+        let lastSynced = "";
         const syncInterval = setInterval(async () => {
-            const editorState = editor.getEditorState();
-            
+            const state = serializeEditorState(editor.getEditorState());
+            const serialized = JSON.stringify(state);
+            if (serialized === lastSynced) return;
             try {
-                // Check localStorage first to ensure we're syncing the latest state
-                const localData = localStorage.getItem(`editor-${storageKey}`);
-                if (localData) {
-                    try {
-                        const parsedData = JSON.parse(localData) as StorageData;
-                        // Only sync if the local state matches the current editor state
-                        // This prevents syncing outdated states
-                        if (JSON.stringify(parsedData.state) !== JSON.stringify(editorState)) {
-                            console.warn('Local state mismatch - skipping sync');
-                            return;
-                        }
-                    } catch (e) {
-                        console.warn('Invalid localStorage data during sync:', e);
-                    }
-                }
-
                 const response = await fetch(SAVE_ENDPOINT, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        version: '1.0',
-                        timestamp: Date.now(),
-                        state: editorState
-                    }),
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ version: STORAGE_VERSION, timestamp: Date.now(), state }),
                 });
-                
-                if (!response.ok) {
-                    console.warn('Backend sync failed');
-                }
+                if (response.ok) lastSynced = serialized;
+                else console.warn("Backend sync failed");
             } catch (error) {
-                console.warn('Backend sync error:', error);
+                console.warn("Backend sync error:", error);
             }
-        }, 30000); // Sync every 30 seconds
+        }, 30000);
 
         return () => clearInterval(syncInterval);
     }, [editor, storageKey]);

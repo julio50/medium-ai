@@ -1,32 +1,20 @@
-
 import os
 import logging
 from dotenv import load_dotenv, find_dotenv
 
-logging.basicConfig(level=logging.DEBUG)
+load_dotenv(find_dotenv())
 
-dotenv_path = find_dotenv()
-logging.debug(f"Found .env file at: {dotenv_path}")
-load_dotenv(dotenv_path)
-
-logging.debug("Environment variables after loading .env:")
-logging.debug(f"OPENAI_API_KEY present: {bool(os.getenv('OPENAI_API_KEY'))}")
-logging.debug(f"OPENAI_BASE_URL: {os.getenv('OPENAI_BASE_URL')}")
-logging.debug(f"OPENAI_MODEL: {os.getenv('OPENAI_MODEL')}")
 
 class OpenAIConfig:
-    api_key: str = os.getenv("OPENAI_API_KEY")
-    base_url: str = os.getenv("OPENAI_BASE_URL")
-    model: str = os.getenv("OPENAI_MODEL")
+    # Local servers (llama-swap, LocalAI, Ollama) ignore the key, but the client requires one
+    api_key: str = os.getenv("OPENAI_API_KEY") or "not-needed"
+    base_url: str = os.getenv("OPENAI_BASE_URL", "http://192.168.1.158:8080/v1")
+    model: str = os.getenv("OPENAI_MODEL", "spark-instruct")
 
-    @classmethod
-    def validate(cls):
-        if not cls.base_url:
-            raise ValueError("OPENAI_BASE_URL is not set")
-        if not cls.model:
-            raise ValueError("OPENAI_MODEL is not set")
-        if not cls.api_key:
-            raise ValueError("OPENAI_API_KEY is not set")
 
-# Validate config at startup
-OpenAIConfig.validate()
+logging.info(f"LLM server: {OpenAIConfig.base_url} (default model: {OpenAIConfig.model})")
+
+
+class SpeechConfig:
+    # speech-to-text model on the same server (whisper.cpp / parakeet / OpenAI)
+    model: str = os.getenv("TRANSCRIBE_MODEL", "whisper-1")
