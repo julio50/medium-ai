@@ -125,30 +125,30 @@ function FloatingMathEditorComponent({
     return (
         <div
             ref={editorRef}
-            className="absolute z-10 top-0 left-0 max-w-sm w-full opacity-0 bg-white shadow-md rounded-lg transition-opacity flex flex-col p-2 selection:bg-lime-400"
+            className="absolute z-10 top-0 left-0 max-w-sm w-full opacity-0 bg-surface text-base-content shadow-md rounded-lg transition-opacity flex flex-col p-2 selection:bg-lime-400 dark:selection:bg-lime-800 dark:ring-1 dark:ring-base-300"
         >
             <div className="modal-content py-2 px-4">
                 <div className="flex justify-between items-center pb-3">
-                    <p className="text-2xl font-lato font-bold text-black">
+                    <p className="text-2xl font-lato font-bold">
                         Equation Editor
                     </p>
                     <div
-                        className="modal-close cursor-pointer z-50 hover:text-black"
+                        className="modal-close cursor-pointer z-50 hover:text-black dark:hover:text-white"
                         onClick={() => setShowEditor(false)}
                     >
                         <CloseIcon />
                     </div>
                 </div>
 
-                <div className="border-b border-gray-300"></div>
+                <div className="border-b border-base-content/20"></div>
 
                 <div
-                    className="flex flex-col pt-4 font-robotomono text-lg text-gray-700"
+                    className="flex flex-col pt-4 font-robotomono text-lg text-base-content/90"
                     spellCheck={false}
                 >
                     <textarea
                         ref={inputRef}
-                        className="w-full h-32 px-3 py-2 rounded-lg focus:outline-none bg-gray-100"
+                        className="w-full h-32 px-3 py-2 rounded-lg focus:outline-none bg-base-200"
                         value={equation}
                         onChange={(e) => {
                             setEquation(e.target.value);
@@ -157,11 +157,11 @@ function FloatingMathEditorComponent({
                 </div>
 
                 <div className="flex flex-col">
-                    <p className="text-xl font-bold py-3 text-black">
+                    <p className="text-xl font-bold py-3">
                         Visualization
                     </p>
-                    <div className="border-b border-gray-300"></div>
-                    <div className="katex-vis py-2 h-20 text-black">
+                    <div className="border-b border-base-content/20"></div>
+                    <div className="katex-vis py-2 h-20">
                         <ErrorBoundary
                             onError={(e) => editor._onError(e)}
                             fallback={null}
@@ -185,7 +185,7 @@ function FloatingMathEditorComponent({
                         Block
                     </button>
                     <button
-                        className="px-4 bg-transparent p-2 rounded-lg text-indigo-500 hover:bg-gray-100 hover:text-indigo-400"
+                        className="px-4 bg-transparent p-2 rounded-lg text-indigo-500 dark:text-indigo-300 hover:bg-base-200 hover:text-indigo-400"
                         onClick={() => setShowEditor(false)}
                     >
                         Cancel

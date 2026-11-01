@@ -255,16 +255,17 @@ export default function VoiceDumpPlugin() {
     return (
         <div
             className="fixed bottom-4 right-4 z-50 flex items-center gap-2 font-poppins text-sm"
+            data-app-chrome // hidden in focus mode and print
             onMouseDown={(e) => e.preventDefault()} // don't steal the editor's cursor
         >
             {label && (
-                <span className="bg-white border border-gray-200 shadow rounded-full px-3 py-1 text-gray-700">
+                <span className="bg-surface border border-base-300 shadow rounded-full px-3 py-1 text-base-content/90">
                     {label}
                 </span>
             )}
             {status === "idle" && (
                 <label
-                    className="bg-white border border-gray-200 shadow rounded-full px-3 py-1 flex items-center gap-2 cursor-pointer text-gray-700"
+                    className="bg-surface border border-base-300 shadow rounded-full px-3 py-1 flex items-center gap-2 cursor-pointer text-base-content/90"
                     title="Turn the transcript into clean bullet points with the selected model"
                 >
                     Tidy

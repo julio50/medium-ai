@@ -22,11 +22,11 @@ function ActivityCard({ a }: { a: Activity }) {
     }, [a.thinking, expanded]);
 
     return (
-        <div className="bg-white border border-gray-200 shadow-lg rounded-xl p-3 w-80 font-poppins text-sm text-gray-800">
+        <div className="bg-surface border border-base-300 shadow-lg rounded-xl p-3 w-80 font-poppins text-sm text-base-content">
             <div className="flex items-center gap-2">
                 <span className="loading loading-dots loading-xs text-accent" />
                 <span className="font-medium">{a.label}</span>
-                <span className="text-gray-500">
+                <span className="text-base-content/60">
                     · {a.answering ? "writing" : "thinking"} <Elapsed since={a.startedAt} />
                 </span>
                 <button
@@ -43,7 +43,7 @@ function ActivityCard({ a }: { a: Activity }) {
             <div
                 ref={scrollRef}
                 className={
-                    "mt-2 text-xs italic text-gray-500 whitespace-pre-wrap overflow-y-auto " +
+                    "mt-2 text-xs italic text-base-content/60 whitespace-pre-wrap overflow-y-auto " +
                     (expanded ? "max-h-72" : "max-h-12")
                 }
             >
@@ -61,6 +61,7 @@ export default function ThinkingIndicator() {
     return (
         <div
             className="fixed bottom-4 left-4 z-50 flex flex-col gap-2"
+            data-app-chrome="fade" // focus mode fades it; Cancel stays reachable
             // keep focus (and the cursor) in the editor: clicking "more"/"less"/
             // Cancel must not blur it, or the in-flight suggestion is dropped
             onMouseDown={(e) => e.preventDefault()}
@@ -68,7 +69,7 @@ export default function ThinkingIndicator() {
             {notices.map((n) => (
                 <div
                     key={n.id}
-                    className="bg-white border border-red-200 shadow-lg rounded-xl p-3 w-80 font-poppins text-sm text-red-700 flex gap-2"
+                    className="bg-surface border border-danger-edge shadow-lg rounded-xl p-3 w-80 font-poppins text-sm text-danger flex gap-2"
                 >
                     <span className="flex-1">{n.text}</span>
                     <button className="btn btn-ghost btn-xs" onClick={() => dismissNotice(n.id)}>

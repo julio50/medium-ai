@@ -1,19 +1,21 @@
 import { endActivity, startActivity, updateActivity } from "./activity";
 
-type StreamEvent = { type: "think" | "text" | "error" | "done"; text?: string };
+type StreamEvent = { type: "think" | "text" | "item" | "error" | "done"; text?: string; data?: unknown };
 
 export type StreamOptions = {
     /** shown in the thinking indicator, e.g. "AI edit" */
     label: string;
     signal?: AbortSignal;
     onText?: (chunk: string, fullText: string) => void;
+    /** structured results (e.g. one margin comment), as soon as each is complete */
+    onItem?: (data: unknown) => void;
 };
 
 export class AIStreamError extends Error {}
 
 /**
  * POST `body` to a backend NDJSON stream endpoint. Answer text is passed to
- * `onText` as it arrives; reasoning ("think" events) drives the global thinking
+ * `onText` as it arrives, structured "item" events to `onItem`; reasoning ("think" events) drives the global thinking
  * indicator, which appears on the first thought and offers Cancel.
  * Resolves with the full answer text; rejects with AbortError on cancel.
  */
@@ -63,6 +65,9 @@ export async function streamAI(url: string, body: unknown, opts: StreamOptions):
                     if (activityId !== null) updateActivity(activityId, () => ({ answering: true }));
                     text += ev.text ?? "";
                     opts.onText?.(ev.text ?? "", text);
+                } else if (ev.type === "item") {
+                    if (activityId !== null) updateActivity(activityId, () => ({ answering: true }));
+                    opts.onItem?.(ev.data);
                 } else if (ev.type === "error") {
                     throw new AIStreamError(ev.text ?? "Model error");
                 } else if (ev.type === "done") {

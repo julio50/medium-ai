@@ -2,8 +2,9 @@ import Editor from "./Editor";
 import MenuBar from "./components/MenuBar";
 import { useState, useRef, useEffect } from "react";
 import { EditorState } from "lexical";
-import { SAVE_ENDPOINT, DEFAULT_MODEL } from "./constants";
-import { toStoredDocument } from "./utils/editorStorage";
+import { DEFAULT_MODEL } from "./constants";
+import { activeDocumentSync, uploadLocalOnlyDocuments } from "./utils/documentSync";
+import { useDocumentKey } from "./utils/documentKey";
 import { AISettingsContext, ThinkingLevel } from "./ai/settings";
 import ThinkingIndicator from "./components/ThinkingIndicator";
 import { useDebounce } from "./plugins/FloatingElements/CodeActionMenu/utils";
@@ -30,28 +31,23 @@ function App() {
     const [isSaveFailed, setIsSaveFailed] = useState(false);
     const editorStateRef = useRef<EditorState | null>(null);
 
+    const docKey = useDocumentKey();
+
+    // documents only this browser has go to the backend too (once per page load)
+    useEffect(() => {
+        const t = setTimeout(() => uploadLocalOnlyDocuments(docKey), 3000);
+        return () => clearTimeout(t);
+    }, []);
+
+    /** Save / Ctrl+S: send the open document to the backend now. */
     const saveContent = async () => {
-        if (editorStateRef.current === null) {
-            return;
-        }
-        const content = toStoredDocument(editorStateRef.current);
-        try {
-            const response = await fetch(SAVE_ENDPOINT, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(content),
-            });
-            if (response.ok) {
-                console.log("Saved!");
-                setIsSaveFailed(false);
-            } else {
-                console.log("Error saving");
-                setIsSaveFailed(true);
-            }
-        } catch (e) {
-            console.log("Error saving: Backend not running?");
+        const sync = activeDocumentSync();
+        if (!sync) return;
+        const outcome = await sync.push({ manual: true });
+        if (outcome === null || outcome.ok) {
+            setIsSaveFailed(false);
+        } else {
+            console.log(outcome.conflict ? "Not saved: the server has a newer version" : `Error saving: ${outcome.error}`);
             setIsSaveFailed(true);
         }
     };
@@ -83,6 +79,8 @@ function App() {
                 isSaveFailed={isSaveFailed}
             />
             <Editor
+                key={docKey}
+                storageKey={docKey}
                 autoCompleteModel={currentModel}
                 editorStateRef={editorStateRef}
             />

@@ -241,20 +241,20 @@ export default function FloatingAIEditor({
     return (
         <div
             ref={editorToolbarRef}
-            className="floating-ai-editor absolute z-10 top-0 left-0 max-w-sm w-full opacity-0 selection:bg-zinc-300"
+            className="floating-ai-editor absolute z-10 top-0 left-0 max-w-sm w-full opacity-0 selection:bg-base-content/20"
         >
-            <div className="flex flex-col items-center p-2 pb-1 bg-zinc-50 shadow-lg">
+            <div className="flex flex-col items-center p-2 pb-1 bg-surface shadow-lg dark:ring-1 dark:ring-base-300">
                 <textarea
                     rows={1}
                     value={instruction}
                     onChange={onInput}
                     ref={textAreaRef}
-                    className="textarea text-lg font-poppins w-full resize-none border-0 bg-zinc-200 focus:outline-0 text-black"
+                    className="textarea text-lg font-poppins w-full resize-none border-0 bg-base-300 focus:outline-0 text-base-content"
                     placeholder="Enter edit instruction"
                 ></textarea>
                 <div className="flex flex-row items-center justify-end w-full mt-1 relative">
                     <div className="flex flex-row items-center justify-between mr-2">
-                        <span className="text-base text-gray-500 mr-2">
+                        <span className="text-base text-base-content/60 mr-2">
                             {"T: " + temperature / 100}
                         </span>
 
@@ -272,7 +272,7 @@ export default function FloatingAIEditor({
 
                     <button
                         className={
-                            "btn btn-ghost btn-sm btn-square mr-1 text-lime-600 disabled:text-gray-400 disabled:bg-transparent" +
+                            "btn btn-ghost btn-sm btn-square mr-1 text-lime-600 dark:text-lime-400 disabled:text-base-content/40 disabled:bg-transparent" +
                             (isLoading ? " loading" : "") +
                             (isFailed ? " text-rose-400" : "")
                         }
@@ -299,7 +299,7 @@ export default function FloatingAIEditor({
                     {tipsVisible ? (
                         <pre
                             ref={tipElemRef}
-                            className="textarea absolute top-12 z-10 w-80 whitespace-pre-wrap max-h-96 overflow-clip"
+                            className="textarea bg-surface dark:ring-1 dark:ring-base-300 absolute top-12 z-10 w-80 whitespace-pre-wrap max-h-96 overflow-clip"
                             // 316 = width of the parent div - width of button 1 - ( width of button 2 / 2 ) where the width also includes margin
                             // 144 = width of the pre element / 2
                             style={{ left: 316 - 160 }}

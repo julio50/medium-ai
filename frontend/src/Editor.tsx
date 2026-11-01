@@ -33,75 +33,52 @@ import { AutoCompleteModel } from "./components/MenuBar";
 import { EditorState } from "lexical";
 import LoadInitialStatePlugin from "./plugins/LoadInitialStatePlugin";
 import BackendSyncPlugin from "./plugins/BackendSyncPlugin";
-import { toStoredDocument } from "./utils/editorStorage";
+import { DocumentSync, setActiveDocumentSync, activeDocumentSync } from "./utils/documentSync";
+import SearchPlugin from "./search/SearchPlugin";
 import VoiceDumpPlugin from "./plugins/VoiceDumpPlugin";
-import { useEffect, useState, useCallback } from "react";
-
-function generateKey() {
-    return Math.random().toString(36).substring(2, 15);
-}
+import FocusModePlugin from "./plugins/FocusModePlugin";
+import QuietTypingPlugin from "./plugins/QuietTypingPlugin";
+import CommentsPlugin from "./plugins/CommentsPlugin";
+import { useEffect, useMemo, useCallback } from "react";
 
 function Placeholder() {
     return <></>;
 }
 
+/** One document; App remounts the editor (key={storageKey}) per document. */
 export default function Editor({
+    storageKey,
     autoCompleteModel,
     editorStateRef,
 }: {
+    storageKey: string;
     autoCompleteModel: AutoCompleteModel;
     editorStateRef: React.MutableRefObject<EditorState | null>;
 }) {
-    const [storageKey, setStorageKey] = useState(() => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const key = urlParams.get('key');
-        if (!key) {
-            const newKey = generateKey();
-            // Update URL with new key
-            const newUrl = new URL(window.location.href);
-            newUrl.searchParams.set('key', newKey);
-            window.history.pushState({}, '', newUrl);
-            return newKey;
-        }
-        return key;
-    });
+    // localStorage (offline cache) + backend sync of this document. Documents
+    // are kept until the user deletes them (no age-based cleanup).
+    const sync = useMemo(() => new DocumentSync(storageKey), [storageKey]);
 
-    // Update storage key when URL changes
     useEffect(() => {
-        const handleUrlChange = () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const key = urlParams.get('key');
-            if (!key) {
-                const newKey = generateKey();
-                // Update URL with new key
-                const newUrl = new URL(window.location.href);
-                newUrl.searchParams.set('key', newKey);
-                window.history.pushState({}, '', newUrl);
-                setStorageKey(newKey);
-            } else {
-                setStorageKey(key);
-            }
+        setActiveDocumentSync(sync);
+        // don't lose the last (debounced) edits when the tab closes
+        const flush = () => sync.flushLocal();
+        window.addEventListener("pagehide", flush);
+        return () => {
+            window.removeEventListener("pagehide", flush);
+            sync.flushLocal();
+            if (activeDocumentSync() === sync) setActiveDocumentSync(null);
         };
+    }, [sync]);
 
-        window.addEventListener('popstate', handleUrlChange);
-        return () => window.removeEventListener('popstate', handleUrlChange);
-    }, []);
-
-    // Documents are kept in localStorage until the user deletes them (no
-    // age-based cleanup: an untouched note must never silently disappear).
-    const saveToStorage = useCallback(
+    const onChange = useCallback(
         (editorState: EditorState) => {
             if (editorStateRef !== null) {
                 editorStateRef.current = editorState;
             }
-            try {
-                localStorage.setItem(`editor-${storageKey}`, JSON.stringify(toStoredDocument(editorState)));
-            } catch (error) {
-                // e.g. QuotaExceededError: keep working; the backend sync still has a copy
-                console.warn("LocalStorage save failed:", error);
-            }
+            sync.onChange(editorState);
         },
-        [storageKey, editorStateRef]
+        [sync, editorStateRef]
     );
 
     const initialConfig = {
@@ -141,7 +118,7 @@ export default function Editor({
                         ErrorBoundary={LexicalErrorBoundary}
                     />
                     {/* history-merge updates (e.g. streamed AI edits) must be saved too */}
-                    <OnChangePlugin onChange={saveToStorage} ignoreHistoryMergeTagChange={false} />
+                    <OnChangePlugin onChange={onChange} ignoreHistoryMergeTagChange={false} />
                     <LinkPlugin />
                     <HistoryPlugin />
                     <FloatingLinkEditorPlugin />
@@ -157,9 +134,13 @@ export default function Editor({
                     <CodeActionMenuPlugin />
                     <ListPlugin />
                     <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
-                    <LoadInitialStatePlugin storageKey={storageKey} />
-                    <BackendSyncPlugin storageKey={storageKey} />
+                    <LoadInitialStatePlugin storageKey={storageKey} sync={sync} />
+                    <BackendSyncPlugin sync={sync} />
+                    <SearchPlugin storageKey={storageKey} />
                     <VoiceDumpPlugin />
+                    <FocusModePlugin />
+                    <QuietTypingPlugin />
+                    <CommentsPlugin storageKey={storageKey} />
                     {autoCompleteModel !== "none" && (
                         <AIAutoCompletePlugin
                             autoCompleteModel={autoCompleteModel}

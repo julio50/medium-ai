@@ -160,7 +160,7 @@ function CodingActionMenuContainer({
                 <div className="dropdown dropdown-open">
                     <button
                         tabIndex={0}
-                        className="btn btn-xs btn-ghost text-xs w-32 text-gray-500 flex flex-row justify-end"
+                        className="btn btn-xs btn-ghost text-xs w-32 text-base-content/60 flex flex-row justify-end"
                         onClick={() => setShowCodeLanguages(!showCodeLanguages)}
                     >
                         {codeFriendlyName}
@@ -169,7 +169,7 @@ function CodingActionMenuContainer({
                     {showCodeLanguages && (
                         <ul
                             tabIndex={0}
-                            className="dropdown-content flex-nowrap menu menu-compact shadow-lg shadow-gray-200 font-poppins p-2 bg-white text-sm text-gray-700 rounded-box w-36 max-h-80 overflow-y-scroll"
+                            className="dropdown-content flex-nowrap menu menu-compact shadow-lg shadow-base-300 dark:shadow-black/40 dark:ring-1 dark:ring-base-300 font-poppins p-2 bg-surface text-sm text-base-content/90 rounded-box w-36 max-h-80 overflow-y-scroll"
                         >
                             {codeLanguages.map((lang) => (
                                 <li key={lang}>

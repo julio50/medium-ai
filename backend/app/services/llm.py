@@ -260,3 +260,9 @@ def obj_schema(**props: dict) -> dict:
         "required": list(props),
         "additionalProperties": False,
     }
+
+
+def embed_texts(texts: list[str], model: str, timeout: float = 60.0) -> list[list[float]]:
+    """Embeddings for `texts`, in order (OpenAI-compatible /embeddings)."""
+    res = client.with_options(timeout=timeout, max_retries=0).embeddings.create(model=model, input=texts)
+    return [d.embedding for d in sorted(res.data, key=lambda d: d.index)]

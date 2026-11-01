@@ -1,12 +1,17 @@
 @tailwind base;
 
+/* colours: theme tokens in index.css */
 .editor-code {
-    @apply bg-gray-100 font-robotomono font-light text-base block py-9 px-14 mt-7 relative overflow-x-auto leading-8 box-border;
+    @apply font-robotomono font-light text-base block py-9 px-14 mt-7 relative overflow-x-auto leading-8 box-border;
+    background-color: var(--editor-code-bg);
     tab-size: 4;
 }
 
 .editor-code:before {
-    @apply absolute left-0 top-0 border-r-2 border-solid border-gray-200 bg-gray-100 text-gray-400 text-right p-4 py-9 whitespace-pre-wrap;
+    @apply absolute left-0 top-0 border-r-2 border-solid text-right p-4 py-9 whitespace-pre-wrap;
+    border-color: var(--editor-code-gutter-border);
+    background-color: var(--editor-code-bg);
+    color: var(--editor-code-gutter-fg);
     content: attr(data-gutter);
     min-width: 25px;
 }
@@ -17,33 +22,33 @@
 } */
 
 .editor-tokenComment {
-    @apply text-gray-500;
+    color: var(--token-comment);
 }
 
 .editor-tokenPunctuation {
-    @apply text-gray-400;
+    color: var(--token-punctuation);
 }
 
 .editor-tokenProperty {
-    @apply text-pink-800;
+    color: var(--token-property);
 }
 
 .editor-tokenSelector {
-    @apply text-lime-600;
+    color: var(--token-selector);
 }
 
 .editor-tokenOperator {
-    @apply text-amber-700;
+    color: var(--token-operator);
 }
 
 .editor-tokenAttr {
-    @apply text-cyan-600;
+    color: var(--token-attr);
 }
 
 .editor-tokenVariable {
-    @apply text-amber-500;
+    color: var(--token-variable);
 }
 
 .editor-tokenFunction {
-    @apply text-pink-500;
+    color: var(--token-function);
 }

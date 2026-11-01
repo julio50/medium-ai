@@ -109,7 +109,7 @@ The model dropdown in the top-right is filled from the server's `/v1/models` lis
    python main.py
    ```
 
-5. Finally, refresh the browser and the frontend will automatically pick up the saved data (if any) stored at `backend/app/data/editor_state.json`
+5. Finally, refresh the browser. Each document (the `?key=` in the URL) is saved to `backend/app/data/library.sqlite3` (set `DATA_DIR` to move it); the browser keeps an offline copy, and whichever copy was edited last wins. An old `editor_state.json` is imported once as the document `?key=imported-editor-state` (the file is kept). Press Ctrl+K (⌘K) to search the open document by words and meaning; semantic search uses `EMBEDDING_MODEL` on your AI server, and documents are indexed in the background.
 
 ### Docker Installation
 

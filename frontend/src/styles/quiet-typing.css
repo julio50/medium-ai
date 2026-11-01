@@ -1,0 +1,14 @@
+/*
+ * Hide UI while typing (plugins/QuietTypingPlugin): `typing-quiet` on <html>
+ * from the first keystroke until the mouse moves. Uses the same
+ * `data-app-chrome` hooks as focus mode; focus mode's own rules win when on.
+ */
+.typing-quiet:not(.focus-mode) [data-app-chrome]:not([data-app-chrome="fade"]):not(:focus-within) {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* e.g. the thinking indicator: dimmed, never hidden (Cancel stays reachable) */
+.typing-quiet:not(.focus-mode) [data-app-chrome="fade"]:not(:hover) {
+    opacity: 0.35;
+}

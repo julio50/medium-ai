@@ -144,7 +144,7 @@ export function PrettierButton({ lang, editor, getCodeDOMNode }: Props) {
             {tipsVisible ? (
                 <pre
                     ref={tipElemRef}
-                    className="textarea absolute top-11 z-10 w-96 -left-40 whitespace-pre-wrap"
+                    className="textarea bg-surface dark:ring-1 dark:ring-base-300 absolute top-11 z-10 w-96 -left-40 whitespace-pre-wrap"
                 >
                     {syntaxError}
                 </pre>

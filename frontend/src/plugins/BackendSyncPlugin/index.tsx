@@ -1,37 +1,24 @@
 import { useEffect } from "react";
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { SAVE_ENDPOINT } from "../../constants";
-import { serializeEditorState, STORAGE_VERSION } from "../../utils/editorStorage";
+import { BACKEND_SYNC_INTERVAL } from "../../constants";
+import { DocumentSync } from "../../utils/documentSync";
 
-interface BackendSyncPluginProps {
-    storageKey: string;
-}
-
-/** Every 30s, send the current document to the backend if it changed. */
-export default function BackendSyncPlugin({ storageKey }: BackendSyncPluginProps) {
-    const [editor] = useLexicalComposerContext();
-
+/**
+ * Sends the open document to the backend every 30 s if it changed, when the
+ * tab is hidden, and when the document is closed (switching documents).
+ */
+export default function BackendSyncPlugin({ sync }: { sync: DocumentSync }) {
     useEffect(() => {
-        let lastSynced = "";
-        const syncInterval = setInterval(async () => {
-            const state = serializeEditorState(editor.getEditorState());
-            const serialized = JSON.stringify(state);
-            if (serialized === lastSynced) return;
-            try {
-                const response = await fetch(SAVE_ENDPOINT, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ version: STORAGE_VERSION, timestamp: Date.now(), state }),
-                });
-                if (response.ok) lastSynced = serialized;
-                else console.warn("Backend sync failed");
-            } catch (error) {
-                console.warn("Backend sync error:", error);
-            }
-        }, 30000);
-
-        return () => clearInterval(syncInterval);
-    }, [editor, storageKey]);
+        const interval = setInterval(() => sync.push(), BACKEND_SYNC_INTERVAL);
+        const onHide = () => {
+            if (document.visibilityState === "hidden") sync.push();
+        };
+        document.addEventListener("visibilitychange", onHide);
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener("visibilitychange", onHide);
+            sync.push(); // closing this document: don't leave the last edits behind
+        };
+    }, [sync]);
 
     return null;
 }

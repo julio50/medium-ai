@@ -210,7 +210,7 @@ function FloatingLinkEditor({
         >
             {!isLink ? null : isEditMode ? (
                 // if the editor is in edit mode, show the input
-                <div className="input flex flex-row items-center justify-between box-border">
+                <div className="input bg-surface dark:ring-1 dark:ring-base-300 flex flex-row items-center justify-between box-border">
                     <input
                         ref={inputRef}
                         value={editedLinkUrl}
@@ -249,7 +249,7 @@ function FloatingLinkEditor({
             ) : (
                 // if the editor is not in edit mode, show the link
                 <>
-                    <div className="input flex flex-row items-center justify-between box-border">
+                    <div className="input bg-surface dark:ring-1 dark:ring-base-300 flex flex-row items-center justify-between box-border">
                         <a
                             href={linkUrl}
                             target="_blank"

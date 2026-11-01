@@ -1,0 +1,66 @@
+/*
+ * Focus mode (plugins/FocusModePlugin): `focus-mode` on <html> while it's on.
+ *
+ * Non-document UI opts in with a data attribute (also used by print.css):
+ *   data-app-chrome            hidden in focus mode
+ *   data-app-chrome="fade"     faded but still usable (hover to bring it back)
+ *   data-app-chrome="menubar"  slides away; returns when the mouse nears the top
+ */
+
+.editor-input > * {
+    transition: opacity 250ms ease;
+}
+
+/* everything but the block holding the cursor */
+.focus-mode .editor-input[data-focus-dim] > *:not([data-focus-active]) {
+    opacity: 0.22;
+}
+
+/* room to scroll the last lines up to the middle (typewriter scrolling) */
+.focus-mode .editor-input {
+    padding-bottom: 45vh;
+}
+
+[data-app-chrome] {
+    transition: opacity 250ms ease, transform 250ms ease, visibility 250ms;
+}
+
+.focus-mode [data-app-chrome]:not([data-app-chrome="fade"]):not([data-app-chrome="menubar"]) {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.focus-mode [data-app-chrome="fade"] {
+    opacity: 0.35;
+}
+
+.focus-mode [data-app-chrome="fade"]:hover,
+.focus-mode [data-app-chrome="fade"]:focus-within {
+    opacity: 1;
+}
+
+.focus-mode [data-app-chrome="menubar"] {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    opacity: 0;
+    transform: translateY(-100%);
+    box-shadow: var(--chrome-shadow); /* index.css: theme-dependent */
+}
+
+.focus-mode[data-focus-reveal] [data-app-chrome="menubar"],
+.focus-mode [data-app-chrome="menubar"]:hover,
+.focus-mode [data-app-chrome="menubar"]:focus-within {
+    opacity: 1;
+    transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .editor-input > *,
+    [data-app-chrome] {
+        transition: none;
+    }
+}

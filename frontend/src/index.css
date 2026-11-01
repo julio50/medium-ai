@@ -3,9 +3,85 @@
 @import "./styles/code-styles.css";
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
+@import "./styles/focus-mode.css";
+@import "./styles/quiet-typing.css";
+@import "./styles/print.css";
+
+/*
+ * Theme tokens. The theme is `data-theme` on <html> (src/theme/theme.ts);
+ * daisyUI colours (base-*, accent, ...) are set in tailwind.config.js, and
+ * these cover the rest: app-chrome tokens exposed to Tailwind (`bg-surface`,
+ * `text-danger`, `border-danger-edge`) and the editor content.
+ *
+ * Dark values are screen-only, so printing / "Export PDF" is always light.
+ */
+:root {
+    /* app chrome (r g b, for Tailwind's alpha modifiers) */
+    --color-surface: 255 255 255;
+    --color-danger: 185 28 28;
+    --color-danger-edge: 254 202 202;
+    --chrome-shadow: 0 1px 8px rgb(0 0 0 / 0.08);
+
+    /* editor content */
+    --editor-fg: #000;
+    --editor-ghost: #9ca3af;
+    --editor-selection: #fde047;
+    --editor-mark-bg: #ff0;
+    --editor-mark-fg: #000;
+    --editor-quote-border: #000;
+    --editor-divider: #111827;
+    --editor-caption: #4b5563;
+    --editor-inline-code-bg: #e5e7eb;
+    --editor-equation-selected: #f3f4f6;
+    --editor-code-bg: #f3f4f6;
+    --editor-code-gutter-border: #e5e7eb;
+    --editor-code-gutter-fg: #9ca3af;
+
+    /* syntax highlighting (styles/code-styles.css) */
+    --token-comment: #6b7280;
+    --token-punctuation: #9ca3af;
+    --token-property: #9d174d;
+    --token-selector: #65a30d;
+    --token-operator: #b45309;
+    --token-attr: #0891b2;
+    --token-variable: #f59e0b;
+    --token-function: #ec4899;
+}
+
+@media screen {
+    [data-theme="dark"] {
+        --color-surface: 37 38 43;
+        --color-danger: 252 165 165;
+        --color-danger-edge: 127 29 29;
+        --chrome-shadow: 0 1px 0 hsl(var(--b3)), 0 4px 16px rgb(0 0 0 / 0.5);
+
+        --editor-fg: #e4e4e7;
+        --editor-ghost: #7c818b;
+        --editor-selection: rgb(202 138 4 / 0.5);
+        --editor-mark-bg: rgb(234 179 8 / 0.35);
+        --editor-mark-fg: currentColor;
+        --editor-quote-border: #a1a1aa;
+        --editor-divider: #a1a1aa;
+        --editor-caption: #a1a1aa;
+        --editor-inline-code-bg: #2f3136;
+        --editor-equation-selected: #2c2d33;
+        --editor-code-bg: #232428;
+        --editor-code-gutter-border: #34363c;
+        --editor-code-gutter-fg: #6b7280;
+
+        --token-comment: #8b929c;
+        --token-punctuation: #9ca3af;
+        --token-property: #f9a8d4;
+        --token-selector: #a3e635;
+        --token-operator: #fbbf24;
+        --token-attr: #22d3ee;
+        --token-variable: #fcd34d;
+        --token-function: #f472b6;
+    }
+}
 
 body {
-    @apply bg-white m-0 relative;
+    @apply bg-base-100 m-0 relative;
 }
 
 .editor-container {
@@ -13,7 +89,13 @@ body {
 }
 
 .editor-input {
-    @apply pb-8 font-merriweather text-black max-w-3xl mx-auto whitespace-normal px-5 h-full text-xl leading-9 outline-none focus:outline-none selection:bg-yellow-300;
+    @apply pb-8 font-merriweather max-w-3xl mx-auto whitespace-normal px-5 h-full text-xl leading-9 outline-none focus:outline-none;
+    color: var(--editor-fg);
+}
+
+.editor-input ::selection,
+.editor-input::selection {
+    background-color: var(--editor-selection);
 }
 
 .editor-paragraph {
@@ -37,11 +119,22 @@ body {
 }
 
 .editor-text-code {
-    @apply bg-gray-200 font-robotomono px-2 py-1 rounded-md text-lg;
+    @apply font-robotomono px-2 py-1 rounded-md text-lg;
+    background-color: var(--editor-inline-code-bg);
+}
+
+/* the yellow mark the AI edit toolbar puts on the text it is rewriting
+   (screen-only: print.css drops it) */
+@media screen {
+    .editor-input mark {
+        background-color: var(--editor-mark-bg);
+        color: var(--editor-mark-fg);
+    }
 }
 
 .editor-text-autocomplete {
-    @apply text-gray-400 selection:bg-transparent cursor-default caret-transparent;
+    @apply selection:bg-transparent cursor-default caret-transparent;
+    color: var(--editor-ghost);
 }
 
 .editor-heading-h1 {
@@ -57,11 +150,21 @@ body {
 }
 
 .editor-quote {
-    @apply italic border-l-4 border-black pl-5 -ml-6 mt-7;
+    @apply italic border-l-4 pl-5 -ml-6 mt-7;
+    border-color: var(--editor-quote-border);
 }
 
 .equation-selected {
-    @apply bg-gray-100;
+    background-color: var(--editor-equation-selected);
+}
+
+.editor-divider {
+    color: var(--editor-divider);
+}
+
+.editor-image-caption {
+    color: var(--editor-caption);
+    background-color: transparent;
 }
 
 .editor-image {
@@ -90,4 +193,28 @@ body {
 
 .editor-list-ul {
     @apply list-disc p-0 m-0 mt-7;
+}
+
+/* the block a search result jumps to (search/SearchPlugin.tsx) */
+@keyframes search-flash {
+    0%,
+    35% {
+        background-color: hsl(var(--a) / 0.28);
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
+.search-flash {
+    animation: search-flash 1.8s ease-out;
+    border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .search-flash {
+        animation: none;
+        outline: 2px solid hsl(var(--a) / 0.6);
+        outline-offset: 2px;
+    }
 }

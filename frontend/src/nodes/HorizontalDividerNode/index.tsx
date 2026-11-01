@@ -73,7 +73,7 @@ function HorizontalDividerComponent({ nodeKey }: { nodeKey: NodeKey }) {
     }, [editor, isSelected, nodeKey]);
 
     return (
-        <div className="flex items-center mt-7 justify-center text-gray-900">
+        <div className="flex items-center mt-7 justify-center editor-divider">
             <HorizontalDividerIcon />
         </div>
     );
